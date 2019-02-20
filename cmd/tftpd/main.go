@@ -9,7 +9,7 @@ import (
 func main() {
 	fmt.Println("Hello world!")
 	srvr := tftpsrv.NewServer()
-	err := srvr.Serve("127.0.0.1:9909")
+	err := srvr.Serve(":9909")
 
 	if err != nil {
 		fmt.Print(err.Error())
