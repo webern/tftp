@@ -1,9 +1,20 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/webern/tftp/tftplib/srv"
+	"os"
+)
 
 func main() {
 	fmt.Println("Hello world!")
+	srvr := tftpsrv.NewServer()
+	err := srvr.Serve("127.0.0.1:9909")
 
-	// TODO implement the in-memory tftp server
+	if err != nil {
+		fmt.Print(err.Error())
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
