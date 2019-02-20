@@ -1,4 +1,4 @@
-package tftp
+package wire
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ const (
 	OpError        = 5
 )
 
-// packet is the interface met by all packet structs
+// Packet is the interface met by all packet structs
 type Packet interface {
 	// Parse parses a packet from its wire representation
 	Parse([]byte) error
