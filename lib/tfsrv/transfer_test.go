@@ -4,13 +4,14 @@ package tfsrv
 
 import (
 	"fmt"
-	"github.com/webern/flog"
-	"github.com/webern/tcore"
-	"github.com/webern/tftp/lib/tfcore"
 	"math"
 	"net"
 	"sync"
 	"testing"
+
+	"github.com/webern/flog"
+	"github.com/webern/tcore"
+	"github.com/webern/tftp/lib/tfcore"
 )
 
 var client, _ = net.ResolveUDPAddr("udp", ":12345")

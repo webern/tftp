@@ -3,8 +3,9 @@
 package tfsrv
 
 import (
-	"github.com/webern/tftp/lib/tfcore"
 	"net"
+
+	"github.com/webern/tftp/lib/tfcore"
 )
 
 // agreement represents a handshake between the client and the server. it contains the client's port number, the

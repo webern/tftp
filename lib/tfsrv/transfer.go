@@ -3,12 +3,13 @@
 package tfsrv
 
 import (
-	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/tfcore"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/webern/flog"
+	"github.com/webern/tftp/lib/tfcore"
 )
 
 var packetPool = sync.Pool{
