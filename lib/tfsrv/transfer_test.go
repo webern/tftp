@@ -3,6 +3,7 @@
 package tfsrv
 
 import (
+	"fmt"
 	"github.com/webern/flog"
 	"github.com/webern/tcore"
 	"github.com/webern/tftp/lib/tfcore"
@@ -90,6 +91,7 @@ func makeTestData(size int) []byte {
 
 func TestPut(t *testing.T) {
 	filename := "testfile.zip"
+	testFile := makeTestData(3671)
 	clientConn, err := net.DialUDP("udp", client, server)
 	//serverConn, err := net.DialUDP("udp", server, client)
 
@@ -128,7 +130,6 @@ func TestPut(t *testing.T) {
 
 	go func() {
 		sendEmptyAtEnd := false
-		testFile := makeTestData(3671)
 		blk := 1
 		for pos := 0; pos < len(testFile); {
 			flog.Tracef("will send block %d", blk)
@@ -178,9 +179,30 @@ func TestPut(t *testing.T) {
 
 	stm := "file.Name"
 	gotS := file.Name
-	wantS := filename + "x"
+	wantS := filename
 	if msg, ok := tcore.TAssertString(stm, gotS, wantS); !ok {
 		t.Error(msg)
+	}
+
+	stm = "len(file.Data)"
+	gotI := len(file.Data)
+	wantI := len(testFile)
+	if msg, ok := tcore.TAssertInt(stm, gotI, wantI); !ok {
+		t.Error(msg)
+	}
+
+	l := len(file.Data)
+	if len(testFile) < l {
+		l = len(testFile)
+	}
+
+	for i := 0; i < l; i++ {
+		stm = fmt.Sprintf("int(file.Data[%d])", i)
+		gotI = int(file.Data[i])
+		wantI = int(testFile[i])
+		if msg, ok := tcore.TAssertInt(stm, gotI, wantI); !ok {
+			t.Error(msg)
+		}
 	}
 
 	flog.Info(file.Name)

@@ -95,7 +95,7 @@ dataLoop:
 			if !ok {
 				return flog.Raise("poo")
 			}
-			raw_data := make([]byte, len(dataPacket.Data)+4)
+			raw_data := make([]byte, len(dataPacket.Data))
 			copy(raw_data, dataPacket.Data)
 			file.Data = append(file.Data, raw_data...)
 			err := sendAck(conn, blk)
