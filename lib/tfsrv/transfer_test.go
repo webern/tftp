@@ -93,10 +93,6 @@ func TestPut(t *testing.T) {
 	filename := "testfile.zip"
 	testFile := makeTestData(3671)
 	clientConn, err := net.DialUDP("udp", client, server)
-	//serverConn, err := net.DialUDP("udp", server, client)
-
-	flog.Trace(clientConn)
-	//flog.Trace(serverConn)
 
 	if err != nil {
 		t.Error(err.Error())
@@ -132,7 +128,6 @@ func TestPut(t *testing.T) {
 		sendEmptyAtEnd := false
 		blk := 1
 		for pos := 0; pos < len(testFile); {
-			flog.Tracef("will send block %d", blk)
 			data := tfcore.PacketData{}
 			data.BlockNum = uint16(blk)
 			end := pos + tfcore.BlockSize
@@ -204,6 +199,4 @@ func TestPut(t *testing.T) {
 			t.Error(msg)
 		}
 	}
-
-	flog.Info(file.Name)
 }

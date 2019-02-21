@@ -3,18 +3,25 @@
 package tfsrv
 
 import (
-	"fmt"
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/tfcore"
+	"io"
 	"net"
+	"sync"
 	"time"
 )
+
+var packetPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, tfcore.MaxPacketSize)
+	},
+}
 
 func put(hndshk handshake, ch chan<- tfcore.File, ready chan<- struct{}) error {
 	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
 	file := tfcore.File{}
 	file.Name = hndshk.tftpInfo.Filename
-	file.Data = make([]byte, 0, 1024)
+	file.Data = make([]byte, 0)
 
 	if err != nil {
 		return flog.Wrap(err)
@@ -24,94 +31,60 @@ func put(hndshk handshake, ch chan<- tfcore.File, ready chan<- struct{}) error {
 		return flog.Wrap(err)
 	}
 
-	// the first block is always 1, the 0 block is the acknowledgement
+	// block 0 is the acknowledgement, block 1 is the first data block
 	blk := 1
 
-	var pkt_buf []byte = make([]byte, tfcore.MaxPacketSize)
-	retry_cnt := 0
+	buf := packetPool.Get().([]byte)
+	memset(buf)
+	defer packetPool.Put(buf)
+
+	// TODO - get rid of didSignalReady, find another way
 	didSignalReady := false
+
 dataLoop:
 	for {
+		// TODO - make timeout wait configurable
 		// set timeout of 1 sec for receiving packet from client
-		err := conn.SetReadDeadline(time.Now().Add(10000 * time.Second))
+		err := conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
 		if err != nil {
 			return err
 		}
 
+		// TODO - figure out something less stupid for testing
 		if ready != nil && !didSignalReady {
 			// let our caller know we are ready to receive packets
 			didSignalReady = true
 			ready <- struct{}{}
-
 		}
 
-		n, raddr, err := conn.ReadFromUDP(pkt_buf)
+		n, raddr, err := readWithRetry(conn, 3, buf, blk)
+
 		if err != nil {
-			e_tout, status := err.(net.Error)
-			if status && e_tout.Timeout() {
-				if retry_cnt >= 3 {
-					fmt.Println("Timeout while reading data from connection.")
-					return flog.Raise("poo")
-				}
-				// resend the previous response
-				conn.Write(nil)
-				retry_cnt = retry_cnt + 1
-				continue
-			}
-			fmt.Println("Error reading data from connection: ", err)
-			err := flog.Raise("poo")
-			_ = sendError(conn, err)
 			return err
 		}
-		packet, err := tfcore.ParsePacket(pkt_buf[:n])
+
+		packet, err := tfcore.ParsePacket(buf[:n])
+
 		if err != nil {
-			if packet.Op() == tfcore.OpError {
-				if pErr, ok := packet.(*tfcore.PacketError); ok {
-					return flog.Raisef("Error received from client - error: ", pErr.Msg)
-				} else {
-					return flog.Raise("Error received from client")
-				}
-			}
-			flog.Errorf("Encountered error while parsing the tftp packet: %s", err.Error())
-			continue
+			return err
 		}
 
-		if packet.Op() != tfcore.OpData {
-			flog.Errorf("wrong op type %d", packet.Op())
-			flog.Bug()
-		} else if tfcore.Block(packet) != uint16(blk) {
-			flog.Errorf("wrong block, want %d, got %d", uint16(blk), tfcore.Block(packet))
-			flog.Bug()
-		} else if hndshk.client.Port != raddr.Port {
-			flog.Bug()
+		// check a bunch of possible error conditions
+		err = verifyDataPacket(packet, hndshk, raddr)
+
+		if err != nil {
+			return err
 		}
 
-		// check if appropriate sequence data packet is received and store it in linked-list
-		if packet.Op() == tfcore.OpData &&
-			tfcore.Block(packet) == uint16(blk) &&
-			hndshk.client.Port == raddr.Port {
-			dataPacket, ok := packet.(*tfcore.PacketData)
-			if !ok {
-				return flog.Raise("poo")
-			}
-			raw_data := make([]byte, len(dataPacket.Data))
-			copy(raw_data, dataPacket.Data)
-			file.Data = append(file.Data, raw_data...)
-			err := sendAck(conn, blk)
-			if err != nil {
-				flog.Error("what should i do with this error? %s", err.Error())
-			}
-			blk++
+		chunk, err := handleData(conn, packet, blk)
+		file.Data = append(file.Data, chunk...)
 
-			// check if this is the last received data packet
-			if len(dataPacket.Data) < 512 {
-				flog.Trace("File transfer completed! Received file")
-				break dataLoop
-			}
-		} else {
-			flog.Bug()
+		if err == io.EOF {
+			break dataLoop
 		}
+
+		blk++
 	}
 
 	ch <- file
@@ -129,6 +102,87 @@ func sendAck(conn *net.UDPConn, block int) error {
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func readWithRetry(conn *net.UDPConn, retries int, ioBuf []byte, lastSuccessfulBlock int) (numBytes int, raddr *net.UDPAddr, err error) {
+	for retryCount := 0; retryCount <= retries; retryCount++ {
+		numBytes, raddr, err = conn.ReadFromUDP(ioBuf)
+
+		if err == nil {
+			// no error - return the results
+			return numBytes, raddr, err
+		}
+
+		// an error condition exists, check if we can downcast it to net.Error
+		netErr, ok := err.(net.Error)
+
+		if !ok {
+			// this is not a net.Error - terminate and notify the client that things are bad
+			_ = sendError(conn, err)
+			return numBytes, raddr, flog.Wrap(err)
+		}
+
+		if !netErr.Timeout() && !netErr.Temporary() {
+			// this is not a recoverable error - terminate and notify the client things are bad
+			_ = sendError(conn, err)
+			return numBytes, raddr, flog.Wrap(netErr)
+		}
+
+		// notify the client that we want to retry
+		err := sendAck(conn, lastSuccessfulBlock)
+
+		if err != nil {
+			// unable to communicate with the client - bail out
+			err = flog.Raisef("lost communication with client: %s", err.Error())
+			_ = sendError(conn, err)
+			return numBytes, raddr, err
+		}
+	}
+
+	err = flog.Raisef("tried connecting %d time(s) without success: %s", err.Error())
+	_ = sendError(conn, err)
+	return numBytes, raddr, err
+}
+
+func handleData(conn *net.UDPConn, packet tfcore.Packet, expectedBlock int) ([]byte, error) {
+	dataPacket, ok := packet.(*tfcore.PacketData)
+
+	if !ok {
+		return nil, flog.Raise("the packet is not a data packet")
+	}
+
+	if dataPacket.BlockNum != uint16(expectedBlock) {
+		return nil, flog.Raisef("wrong block num, got %d, want %d", dataPacket.BlockNum, expectedBlock)
+	}
+
+	copied := make([]byte, len(dataPacket.Data))
+	copy(copied, dataPacket.Data)
+	err := sendAck(conn, expectedBlock)
+
+	if err != nil {
+		return nil, flog.Raisef("acknowledgement could not be sent %s", err.Error())
+	}
+
+	// check if this is the last received data packet
+	if len(dataPacket.Data) < tfcore.BlockSize {
+		return copied, io.EOF
+	}
+
+	return copied, nil
+}
+
+func verifyDataPacket(packet tfcore.Packet, hndshk handshake, currentAddr *net.UDPAddr) error {
+	if packet.IsError() {
+		return flog.Raise("error received from client")
+	} else if !packet.IsData() {
+		return flog.Raisef("wrong op type %d", packet.Op())
+	} else if currentAddr == nil {
+		return flog.Raise("address is nil")
+	} else if hndshk.client.Port != currentAddr.Port {
+		return flog.Raisef("wrong port, want %d, got %d", currentAddr.Port, hndshk.client.Port)
 	}
 
 	return nil
