@@ -1,11 +1,11 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package tftpsrv
+package tfsrv
 
 import (
 	"fmt"
 	"github.com/webern/flog"
-	"github.com/webern/tftp/tftplib/wire"
+	"github.com/webern/tftp/lib/tfcore"
 	"net"
 	"sync"
 )
@@ -55,7 +55,7 @@ func waitForHandshake(conn net.UDPConn) (handshake, error) {
 		return handshake{}, flog.Raise("unable to receive the udp packet")
 	}
 
-	pkt, err := wire.ParsePacket(buf)
+	pkt, err := tfcore.ParsePacket(buf)
 
 	if err != nil {
 		return handshake{}, flog.Wrap(err)
@@ -63,11 +63,11 @@ func waitForHandshake(conn net.UDPConn) (handshake, error) {
 		return handshake{}, flog.Raise("nil packet received from wire.ParsePacket")
 	}
 
-	if pkt.Op() != wire.OpRRQ && pkt.Op() != wire.OpWRQ {
+	if pkt.Op() != tfcore.OpRRQ && pkt.Op() != tfcore.OpWRQ {
 		return handshake{}, flog.Raisef("bad op value: %d", pkt.Op())
 	}
 
-	tftpInfo, ok := pkt.(*wire.PacketRequest)
+	tftpInfo, ok := pkt.(*tfcore.PacketRequest)
 
 	if !ok || tftpInfo == nil {
 		return handshake{}, flog.Raise("unable to downcast the packaet to the correct type")

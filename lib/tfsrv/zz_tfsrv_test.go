@@ -1,6 +1,4 @@
-// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
-
-package wire
+package tfsrv
 
 import (
 	"github.com/webern/flog"

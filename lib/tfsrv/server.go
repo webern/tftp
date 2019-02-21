@@ -1,11 +1,11 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package tftpsrv
+package tfsrv
 
 import (
 	"fmt"
 	"github.com/webern/flog"
-	"github.com/webern/tftp/tftplib/wire"
+	"github.com/webern/tftp/lib/tfcore"
 	"net"
 	"time"
 )
@@ -24,7 +24,7 @@ type TID struct {
 type udpPacket struct {
 	clientAddress *net.UDPAddr
 	rawPayload    []byte
-	parsedPayload wire.Packet
+	parsedPayload tfcore.Packet
 	numBytes      int
 }
 
@@ -41,8 +41,8 @@ func NewServer() Server {
 }
 
 func sendError(conn *net.UDPConn, theError error) error {
-	pktErr := wire.PacketError{}
-	pktErr.Code = wire.OpError
+	pktErr := tfcore.PacketError{}
+	pktErr.Code = tfcore.OpError
 	pktErr.Msg = theError.Error()
 	_, err := conn.Write(pktErr.Serialize())
 	return err
@@ -81,7 +81,7 @@ listeningLoop:
 		}
 
 		// send first ack for wrq with block #0
-		ak := wire.PacketAck{}
+		ak := tfcore.PacketAck{}
 		ak.BlockNum = 0
 		_, err = wrq_conn.Write(ak.Serialize())
 
@@ -90,7 +90,7 @@ listeningLoop:
 		}
 
 		ak.BlockNum++
-		var pkt_buf []byte = make([]byte, wire.MaxPacketSize)
+		var pkt_buf []byte = make([]byte, tfcore.MaxPacketSize)
 		retry_cnt := 0
 	dataLoop:
 		for {
@@ -114,10 +114,10 @@ listeningLoop:
 				_ = sendError(wrq_conn, err)
 				return err
 			}
-			packet, err := wire.ParsePacket(pkt_buf[:n])
+			packet, err := tfcore.ParsePacket(pkt_buf[:n])
 			if err != nil {
-				if packet.Op() == wire.OpError {
-					if pErr, ok := packet.(*wire.PacketError); ok {
+				if packet.Op() == tfcore.OpError {
+					if pErr, ok := packet.(*tfcore.PacketError); ok {
 						return flog.Raisef("Error received from client - error: ", pErr.Msg)
 					} else {
 						return flog.Raise("Error received from client")
@@ -128,10 +128,10 @@ listeningLoop:
 			}
 
 			// check if appropriate sequence data packet is received and store it in linked-list
-			if packet.Op() == wire.OpData &&
-				wire.Block(packet) == ak.BlockNum &&
+			if packet.Op() == tfcore.OpData &&
+				tfcore.Block(packet) == ak.BlockNum &&
 				handshake.client.Port == raddr.Port {
-				dataPacket, ok := packet.(*wire.PacketData)
+				dataPacket, ok := packet.(*tfcore.PacketData)
 				if !ok {
 					return flog.Raise("poo")
 				}
