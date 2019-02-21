@@ -11,7 +11,6 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 )
 
 var client, _ = net.ResolveUDPAddr("udp", ":12345")
@@ -122,7 +121,7 @@ func TestPut(t *testing.T) {
 	//readyForSend.Wait()
 
 	<-ready
-	//time.Sleep(500 * time.Millisecond)
+	//time.Sleep(50 * time.Millisecond)
 
 	go func() {
 		sendEmptyAtEnd := false
@@ -139,7 +138,7 @@ func TestPut(t *testing.T) {
 			}
 			data.Data = testFile[pos:end]
 			_, err := clientConn.Write(data.Serialize())
-			time.Sleep(50 * time.Millisecond)
+			//time.Sleep(50 * time.Millisecond)
 
 			if err != nil {
 				flog.Error(err.Error())

@@ -57,16 +57,6 @@ func (p *PacketRequest) Op() uint16 {
 	return p.OpCode
 }
 
-func Block(packet Packet) uint16 {
-	if ack, ok := packet.(*PacketAck); ok {
-		return ack.BlockNum
-	} else if dat, ok := packet.(*PacketData); ok {
-		return dat.BlockNum
-	}
-
-	return 0
-}
-
 func (p *PacketRequest) Parse(buf []byte) (err error) {
 	if p.OpCode, buf, err = parseUint16(buf); err != nil {
 		return err
