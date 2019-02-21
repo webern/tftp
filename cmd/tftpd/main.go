@@ -1,18 +1,21 @@
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
 package main
 
 import (
-	"fmt"
+	"github.com/webern/flog"
 	"github.com/webern/tftp/tftplib/srv"
 	"os"
 )
 
 func main() {
-	fmt.Println("Hello world!")
+	flog.SetTruncationPath("tftp/")
+	flog.SetLevel(flog.TraceLevel)
 	srvr := tftpsrv.NewServer()
-	err := srvr.Serve(":9909")
+	err := srvr.Serve(9909)
 
 	if err != nil {
-		fmt.Print(err.Error())
+		flog.Error(err.Error())
 		os.Exit(1)
 	}
 

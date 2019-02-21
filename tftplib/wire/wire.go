@@ -1,3 +1,5 @@
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
 package wire
 
 import (
@@ -21,6 +23,8 @@ const (
 
 // Packet is the interface met by all packet structs
 type Packet interface {
+	// Op returns the Op code for this packet
+	Op() uint16
 	// Parse parses a packet from its wire representation
 	Parse([]byte) error
 	// Serialize serializes a packet to its wire representation
@@ -29,13 +33,27 @@ type Packet interface {
 
 // PacketRequest represents a request to read or rite a file.
 type PacketRequest struct {
-	Op       uint16 // OpRRQ or OpWRQ
+	OpCode   uint16 // OpRRQ or OpWRQ
 	Filename string
 	Mode     string
 }
 
+func (p *PacketRequest) Op() uint16 {
+	return p.OpCode
+}
+
+func Block(packet Packet) uint16 {
+	if ack, ok := packet.(*PacketAck); ok {
+		return ack.BlockNum
+	} else if dat, ok := packet.(*PacketData); ok {
+		return dat.BlockNum
+	}
+
+	return 0
+}
+
 func (p *PacketRequest) Parse(buf []byte) (err error) {
-	if p.Op, buf, err = parseUint16(buf); err != nil {
+	if p.OpCode, buf, err = parseUint16(buf); err != nil {
 		return err
 	}
 	if p.Filename, buf, err = parseString(buf); err != nil {
@@ -49,7 +67,7 @@ func (p *PacketRequest) Parse(buf []byte) (err error) {
 
 func (p *PacketRequest) Serialize() []byte {
 	buf := make([]byte, 2+len(p.Filename)+1+len(p.Mode)+1)
-	binary.BigEndian.PutUint16(buf, p.Op)
+	binary.BigEndian.PutUint16(buf, p.OpCode)
 	copy(buf[2:], p.Filename)
 	copy(buf[2+len(p.Filename)+1:], p.Mode)
 	return buf
@@ -59,6 +77,10 @@ func (p *PacketRequest) Serialize() []byte {
 type PacketData struct {
 	BlockNum uint16
 	Data     []byte
+}
+
+func (p *PacketData) Op() uint16 {
+	return OpData
 }
 
 func (p *PacketData) Parse(buf []byte) (err error) {
@@ -83,6 +105,10 @@ type PacketAck struct {
 	BlockNum uint16
 }
 
+func (p *PacketAck) Op() uint16 {
+	return OpAck
+}
+
 func (p *PacketAck) Parse(buf []byte) (err error) {
 	buf = buf[2:] // skip over op
 	if p.BlockNum, buf, err = parseUint16(buf); err != nil {
@@ -102,6 +128,10 @@ func (p *PacketAck) Serialize() []byte {
 type PacketError struct {
 	Code uint16
 	Msg  string
+}
+
+func (p *PacketError) Op() uint16 {
+	return OpError
 }
 
 func (p *PacketError) Parse(buf []byte) (err error) {

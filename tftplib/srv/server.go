@@ -1,16 +1,37 @@
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
 package tftpsrv
 
 import (
 	"fmt"
+	"github.com/webern/flog"
 	"github.com/webern/tftp/tftplib/wire"
-	"log"
 	"net"
+	"time"
 )
 
 // TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
 // packet, which is the size of an Ethernet MTU minus the headers of
 // TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
 const TftpMaxPacketSize = 1468
+
+// TID represents a 'transfer id' which is actually just two ports, the requester's port and the responder's port.
+type TID struct {
+	RequesterPort uint16
+	ResponderPort uint16
+}
+
+type udpPacket struct {
+	clientAddress *net.UDPAddr
+	rawPayload    []byte
+	parsedPayload wire.Packet
+	numBytes      int
+}
+
+func newUDPPacket(data []byte, bytes_recv int) (packet udpPacket, err error) {
+	packet.numBytes = bytes_recv
+	return packet, nil
+}
 
 type Server struct {
 }
@@ -19,80 +40,125 @@ func NewServer() Server {
 	return Server{}
 }
 
-func (s *Server) Serve(addr string) error {
+func sendError(conn *net.UDPConn, theError error) error {
+	pktErr := wire.PacketError{}
+	pktErr.Code = wire.OpError
+	pktErr.Msg = theError.Error()
+	_, err := conn.Write(pktErr.Serialize())
+	return err
+}
 
-	uaddr, err := net.ResolveUDPAddr("udp", addr)
+func (s *Server) Serve(port uint16) error {
 
-	if err != nil {
-		return err
-	}
-
-	uconn, err := net.ListenUDP("udp", uaddr)
+	mainListener, err := makeListener(port)
 
 	if err != nil {
 		return err
 	}
 
 	err = nil
+	theFile := make([]byte, 0, 1024)
 
 listeningLoop:
 	for {
-		buf := make([]byte, TftpMaxPacketSize) // TODO: sync.Pool
-		numBytes, ua, err := uconn.ReadFromUDP(buf)
+		//buf := make([]byte, TftpMaxPacketSize) // TODO: sync.Pool
+		//numBytes, ua, err := mainListener.ReadFromUDP(buf)
+		handshake, err := waitForHandshake(mainListener)
 
 		if err != nil {
-			return err
-		} else if ua == nil {
-			continue listeningLoop
-		} else if numBytes <= 0 {
-			fmt.Printf("error no bytes addr %v\n", *ua)
+			// TODO - log to the connection log
+			flog.Error(err.Error())
 			continue
 		}
 
-		pkt, err := wire.ParsePacket(buf)
+		//if ok {
+		flog.Tracef("filename: %s", handshake.tftpInfo.Filename)
+
+		wrq_conn, err := net.DialUDP("udp", &handshake.server, &handshake.client)
+		if err != nil {
+			flog.Errorf("Error dialing UDP to client: ", err.Error())
+			panic(err)
+		}
+
+		// send first ack for wrq with block #0
+		ak := wire.PacketAck{}
+		ak.BlockNum = 0
+		_, err = wrq_conn.Write(ak.Serialize())
 
 		if err != nil {
-			panic("x")
-		} else if pkt == nil {
-			panic("y")
+			panic(err)
 		}
 
-		log.Printf("%v", pkt)
-		log.Printf("New Connection from %s!", ua)
-		log.Print(numBytes)
-		log.Print(ua)
+		ak.BlockNum++
+		var pkt_buf []byte = make([]byte, wire.MaxPacketSize)
+		retry_cnt := 0
+	dataLoop:
+		for {
+			// set timeout of 1 sec for receiving packet from client
+			wrq_conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			n, raddr, err := wrq_conn.ReadFromUDP(pkt_buf)
+			if err != nil {
+				e_tout, status := err.(net.Error)
+				if status && e_tout.Timeout() {
+					if retry_cnt >= 3 {
+						fmt.Println("Timeout while reading data from connection.")
+						return flog.Raise("poo")
+					}
+					// resend the previous response
+					wrq_conn.Write(nil)
+					retry_cnt = retry_cnt + 1
+					continue
+				}
+				fmt.Println("Error reading data from connection: ", err)
+				err := flog.Raise("poo")
+				_ = sendError(wrq_conn, err)
+				return err
+			}
+			packet, err := wire.ParsePacket(pkt_buf[:n])
+			if err != nil {
+				if packet.Op() == wire.OpError {
+					if pErr, ok := packet.(*wire.PacketError); ok {
+						return flog.Raisef("Error received from client - error: ", pErr.Msg)
+					} else {
+						return flog.Raise("Error received from client")
+					}
+				}
+				flog.Errorf("Encountered error while parsing the tftp packet: %s", err.Error())
+				continue
+			}
 
-		if ua.Port == 1 {
+			// check if appropriate sequence data packet is received and store it in linked-list
+			if packet.Op() == wire.OpData &&
+				wire.Block(packet) == ak.BlockNum &&
+				handshake.client.Port == raddr.Port {
+				dataPacket, ok := packet.(*wire.PacketData)
+				if !ok {
+					return flog.Raise("poo")
+				}
+				raw_data := make([]byte, len(dataPacket.Data)+4)
+				copy(raw_data, dataPacket.Data)
+				theFile = append(theFile, raw_data...)
+
+				_, err = wrq_conn.Write(ak.Serialize())
+				retry_cnt = 0 // reset retry count
+				ak.BlockNum++
+
+				// check if this is the last received data packet
+				if len(dataPacket.Data) < 512 {
+					flog.Trace("File transfer completed! Received file")
+					break dataLoop
+				}
+			}
+		}
+
+		//}
+		if len(theFile) > 0 {
 			break listeningLoop
 		}
-
-		if req, ok := pkt.(*wire.PacketRequest); ok && req != nil {
-			fmt.Printf("filename: %s", req.Filename)
-
-			wrq_addr, err := net.ResolveUDPAddr("udp", ":0")
-			if err != nil {
-				fmt.Println("Error resolving UDP address: ", err)
-				panic(err)
-			}
-			wrq_conn, err := net.DialUDP("udp", wrq_addr, ua)
-			if err != nil {
-				fmt.Println("Error dialing UDP to client: ", err)
-				panic(err)
-			}
-
-			// send first ack for wrq with block #0
-			ak := wire.PacketAck{}
-			ak.BlockNum = 0
-			_, err = wrq_conn.Write(ak.Serialize())
-
-			if err != nil {
-				panic(err)
-			}
-
-		}
-
 	}
 
+	fmt.Print("\n\n")
+	fmt.Print(string(theFile))
 	return err
 }
 
