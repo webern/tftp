@@ -1,4 +1,6 @@
-package tftp
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
+package tfcore
 
 import (
 	"bytes"
@@ -19,23 +21,44 @@ const (
 	OpError        = 5
 )
 
-// packet is the interface met by all packet structs
+// Packet is the interface met by all packet structs
 type Packet interface {
+	// Op returns the Op code for this packet
+	Op() uint16
 	// Parse parses a packet from its wire representation
 	Parse([]byte) error
 	// Serialize serializes a packet to its wire representation
 	Serialize() []byte
+
+	// IsRRQ is for convenience, returns true if the packet is a read request packet
+	IsRRQ() bool
+
+	// IsWRQ is for convenience, returns true if the packet is a write request packet
+	IsWRQ() bool
+
+	// IsData is for convenience, returns true if the packet is a data packet
+	IsData() bool
+
+	// IsAck is for convenience, returns true if the packet is a ack packet
+	IsAck() bool
+
+	// IsError is for convenience, returns true if the packet is an error packet
+	IsError() bool
 }
 
 // PacketRequest represents a request to read or rite a file.
 type PacketRequest struct {
-	Op       uint16 // OpRRQ or OpWRQ
+	OpCode   uint16 // OpRRQ or OpWRQ
 	Filename string
 	Mode     string
 }
 
+func (p *PacketRequest) Op() uint16 {
+	return p.OpCode
+}
+
 func (p *PacketRequest) Parse(buf []byte) (err error) {
-	if p.Op, buf, err = parseUint16(buf); err != nil {
+	if p.OpCode, buf, err = parseUint16(buf); err != nil {
 		return err
 	}
 	if p.Filename, buf, err = parseString(buf); err != nil {
@@ -49,16 +72,40 @@ func (p *PacketRequest) Parse(buf []byte) (err error) {
 
 func (p *PacketRequest) Serialize() []byte {
 	buf := make([]byte, 2+len(p.Filename)+1+len(p.Mode)+1)
-	binary.BigEndian.PutUint16(buf, p.Op)
+	binary.BigEndian.PutUint16(buf, p.OpCode)
 	copy(buf[2:], p.Filename)
 	copy(buf[2+len(p.Filename)+1:], p.Mode)
 	return buf
+}
+
+func (p *PacketRequest) IsRRQ() bool {
+	return p.OpCode == OpRRQ
+}
+
+func (p *PacketRequest) IsWRQ() bool {
+	return p.OpCode == OpWRQ
+}
+
+func (p *PacketRequest) IsData() bool {
+	return false
+}
+
+func (p *PacketRequest) IsAck() bool {
+	return false
+}
+
+func (p *PacketRequest) IsError() bool {
+	return false
 }
 
 // PacketData carries a block of data in a file transmission.
 type PacketData struct {
 	BlockNum uint16
 	Data     []byte
+}
+
+func (p *PacketData) Op() uint16 {
+	return OpData
 }
 
 func (p *PacketData) Parse(buf []byte) (err error) {
@@ -78,9 +125,33 @@ func (p *PacketData) Serialize() []byte {
 	return buf
 }
 
+func (p *PacketData) IsRRQ() bool {
+	return true
+}
+
+func (p *PacketData) IsWRQ() bool {
+	return false
+}
+
+func (p *PacketData) IsData() bool {
+	return true
+}
+
+func (p *PacketData) IsAck() bool {
+	return false
+}
+
+func (p *PacketData) IsError() bool {
+	return false
+}
+
 // PacketAck acknowledges receipt of a data packet
 type PacketAck struct {
 	BlockNum uint16
+}
+
+func (p *PacketAck) Op() uint16 {
+	return OpAck
 }
 
 func (p *PacketAck) Parse(buf []byte) (err error) {
@@ -98,10 +169,34 @@ func (p *PacketAck) Serialize() []byte {
 	return buf
 }
 
+func (p *PacketAck) IsRRQ() bool {
+	return false
+}
+
+func (p *PacketAck) IsWRQ() bool {
+	return false
+}
+
+func (p *PacketAck) IsData() bool {
+	return false
+}
+
+func (p *PacketAck) IsAck() bool {
+	return true
+}
+
+func (p *PacketAck) IsError() bool {
+	return false
+}
+
 // PacketError is sent by a peer who has encountered an error condition
 type PacketError struct {
 	Code uint16
 	Msg  string
+}
+
+func (p *PacketError) Op() uint16 {
+	return OpError
 }
 
 func (p *PacketError) Parse(buf []byte) (err error) {
@@ -121,6 +216,26 @@ func (p *PacketError) Serialize() []byte {
 	binary.BigEndian.PutUint16(buf[2:], p.Code)
 	copy(buf[4:], p.Msg)
 	return buf
+}
+
+func (p *PacketError) IsRRQ() bool {
+	return false
+}
+
+func (p *PacketError) IsWRQ() bool {
+	return false
+}
+
+func (p *PacketError) IsData() bool {
+	return false
+}
+
+func (p *PacketError) IsAck() bool {
+	return false
+}
+
+func (p *PacketError) IsError() bool {
+	return false
 }
 
 // parseUint16 reads a big-endian uint16 from the beginning of buf,

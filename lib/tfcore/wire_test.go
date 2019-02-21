@@ -1,4 +1,6 @@
-package tftp
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
+package tfcore
 
 import (
 	"reflect"
@@ -87,10 +89,36 @@ func TestDeserializationInvalid(t *testing.T) {
 		[]byte("\x00\x05\xab"),
 		[]byte("\x00\x05\xab\xcd"),
 		[]byte("\x00\x05\xab\xcdparachute failure"),
+
+		// truncated error
+		[]byte("\x05"),
 	}
 
 	for _, test := range tests {
 		if p, err := ParsePacket(test); err == nil {
+			t.Errorf("Parsing packet %q: expected error; got %#v", test, p)
+		}
+	}
+}
+
+func TestParseError(t *testing.T) {
+	tests := [][]byte{
+		// no opcode
+		[]byte(""),
+
+		// invalid opcode
+		[]byte("\x00\x00"),
+		[]byte("\x00\x06"),
+		[]byte("\xff\x01"),
+		[]byte("\xff\xff"),
+
+		// no zero terminator for mode
+		[]byte("\x00\x01foo\x00bar\x01"),
+	}
+
+	for _, test := range tests {
+		p := PacketRequest{}
+		if err := p.Parse(test); err == nil {
 			t.Errorf("Parsing packet %q: expected error; got %#v", test, p)
 		}
 	}
