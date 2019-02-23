@@ -3,7 +3,7 @@
 package srv
 
 import (
-	"fmt"
+	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/stor"
 	"net"
 
@@ -34,9 +34,13 @@ func newUDPPacket(data []byte, bytes_recv int) (packet udpPacket, err error) {
 }
 
 type Server struct {
+	store stor.Store
 }
 
-func NewServer() Server {
+func NewServer(store stor.Store) Server {
+	return Server{
+		store: store,
+	}
 	return Server{}
 }
 
@@ -58,15 +62,33 @@ func (s *Server) Serve(port uint16) error {
 
 	for {
 		handshake, err := waitForHandshake(mainListener)
-		fileChan := make(chan cor.File, 1)
-		memStore := stor.NewMemStore()
-		err = put(handshake, memStore)
+
+		if handshake.tftpInfo.IsWRQ() {
+			err = put(handshake, s.store)
+		} else if handshake.tftpInfo.IsRRQ() {
+			err = get(handshake, s.store)
+		} else {
+			go func() {
+				conn, err := net.DialUDP("udp", &handshake.server, &handshake.client)
+				if err != nil {
+					flog.Error(err.Error())
+					return
+				}
+
+				err = sendErr(conn, cor.ErrBadOp, "")
+
+				if err != nil {
+					flog.Error(err.Error())
+					return
+				}
+
+			}()
+		}
+
 		if err != nil {
 			panic(err)
 		}
-		file := <-fileChan
-		fmt.Print("\n\n")
-		fmt.Print(string(file.Data))
+
 	}
 
 	return nil
