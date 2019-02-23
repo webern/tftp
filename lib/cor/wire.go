@@ -12,18 +12,10 @@ import (
 // may limit the length of filenames in RRQ/WRQs -- RFC1350 doesn't offer a bound for these.
 const MaxPacketSize = 2048
 
-const (
-	OpRRQ   uint16 = 1 // Read Request
-	OpWRQ          = 2 // Write Request
-	OpData         = 3 // Data Packet
-	OpAck          = 4 // Acknowledgement
-	OpError        = 5 // Error Packet
-)
-
 // Packet is the interface met by all packet structs
 type Packet interface {
-	// Op returns the Op code for this packet
-	Op() uint16
+	// OpType returns the OpType code for this packet
+	Op() OpType
 
 	// Parse parses a packet from its wire representation
 	Parse([]byte) error
@@ -49,19 +41,21 @@ type Packet interface {
 
 // PacketRequest represents a request to read or rite a file.
 type PacketRequest struct {
-	OpCode   uint16 // OpRRQ or OpWRQ
+	OpCode   OpType // OpRRQ or OpWRQ
 	Filename string
 	Mode     string
 }
 
-func (p *PacketRequest) Op() uint16 {
+func (p *PacketRequest) Op() OpType {
 	return p.OpCode
 }
 
 func (p *PacketRequest) Parse(buf []byte) (err error) {
-	if p.OpCode, buf, err = parseUint16(buf); err != nil {
+	var opUntyped uint16
+	if opUntyped, buf, err = parseUint16(buf); err != nil {
 		return err
 	}
+	p.OpCode = OpType(opUntyped)
 	if p.Filename, buf, err = parseString(buf); err != nil {
 		return err
 	}
@@ -73,7 +67,7 @@ func (p *PacketRequest) Parse(buf []byte) (err error) {
 
 func (p *PacketRequest) Serialize() []byte {
 	buf := make([]byte, 2+len(p.Filename)+1+len(p.Mode)+1)
-	binary.BigEndian.PutUint16(buf, p.OpCode)
+	binary.BigEndian.PutUint16(buf, uint16(p.OpCode))
 	copy(buf[2:], p.Filename)
 	copy(buf[2+len(p.Filename)+1:], p.Mode)
 	return buf
@@ -105,7 +99,7 @@ type PacketData struct {
 	Data     []byte
 }
 
-func (p *PacketData) Op() uint16 {
+func (p *PacketData) Op() OpType {
 	return OpData
 }
 
@@ -151,7 +145,7 @@ type PacketAck struct {
 	BlockNum uint16
 }
 
-func (p *PacketAck) Op() uint16 {
+func (p *PacketAck) Op() OpType {
 	return OpAck
 }
 
@@ -196,7 +190,7 @@ type PacketError struct {
 	Msg  string
 }
 
-func (p *PacketError) Op() uint16 {
+func (p *PacketError) Op() OpType {
 	return OpError
 }
 
@@ -266,7 +260,7 @@ func ParsePacket(buf []byte) (p Packet, err error) {
 	if opcode, _, err = parseUint16(buf); err != nil {
 		return
 	}
-	switch opcode {
+	switch OpType(opcode) {
 	case OpRRQ, OpWRQ:
 		p = &PacketRequest{}
 	case OpData:

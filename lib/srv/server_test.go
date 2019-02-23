@@ -3,18 +3,15 @@
 package srv
 
 import (
+	"github.com/webern/tftp/lib/stor"
 	"testing"
 )
 
 func TestServer(t *testing.T) {
 
-	srvr := NewServer()
+	srvr := NewServer(stor.NewMemStore(), "conn.log")
 	go srvr.Serve(9909)
 	defer srvr.Stop()
 
-	//if err != nil {
-	//	t.Errorf("error received from server.Serve: %s", err.Error())
-	//	return
-	//}
-
+	// TODO - run actual server tests
 }

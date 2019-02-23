@@ -12,7 +12,7 @@ func TestSerializationDeserialization(t *testing.T) {
 	tests := []struct {
 		bytes  []byte
 		packet Packet
-		op     uint16
+		op     OpType
 	}{
 		{
 			[]byte("\x00\x01foo\x00bar\x00"),
