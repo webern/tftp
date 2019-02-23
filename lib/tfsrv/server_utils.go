@@ -4,10 +4,11 @@ package tfsrv
 
 import (
 	"fmt"
-	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/tfcore"
 	"net"
 	"sync"
+
+	"github.com/webern/flog"
+	"github.com/webern/tftp/lib/tfcore"
 )
 
 func makeListener(port uint16) (net.UDPConn, error) {
@@ -63,7 +64,7 @@ func waitForHandshake(conn net.UDPConn) (handshake, error) {
 		return handshake{}, flog.Raise("nil packet received from wire.ParsePacket")
 	}
 
-	if pkt.Op() != tfcore.OpRRQ && pkt.Op() != tfcore.OpWRQ {
+	if !pkt.IsRRQ() && !pkt.IsWRQ() {
 		return handshake{}, flog.Raisef("bad op value: %d", pkt.Op())
 	}
 

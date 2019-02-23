@@ -3,6 +3,7 @@
 package tfcore
 
 import (
+	"github.com/webern/tcore"
 	"reflect"
 	"testing"
 )
@@ -11,30 +12,37 @@ func TestSerializationDeserialization(t *testing.T) {
 	tests := []struct {
 		bytes  []byte
 		packet Packet
+		op     uint16
 	}{
 		{
 			[]byte("\x00\x01foo\x00bar\x00"),
 			&PacketRequest{OpRRQ, "foo", "bar"},
+			OpRRQ,
 		},
 		{
 			[]byte("\x00\x02foo\x00bar\x00"),
 			&PacketRequest{OpWRQ, "foo", "bar"},
+			OpWRQ,
 		},
 		{
 			[]byte("\x00\x03\x12\x34fnord"),
 			&PacketData{0x1234, []byte("fnord")},
+			OpData,
 		},
 		{
 			[]byte("\x00\x03\x12\x34"),
 			&PacketData{0x1234, []byte("")},
+			OpData,
 		},
 		{
 			[]byte("\x00\x04\xd0\x0f"),
 			&PacketAck{0xd00f},
+			OpAck,
 		},
 		{
 			[]byte("\x00\x05\xab\xcdparachute failure\x00"),
 			&PacketError{0xabcd, "parachute failure"},
+			OpError,
 		},
 	}
 
@@ -49,6 +57,48 @@ func TestSerializationDeserialization(t *testing.T) {
 			t.Errorf("Unable to parse packet %q: %s", test.bytes, err)
 		} else if !reflect.DeepEqual(test.packet, actualPacket) {
 			t.Errorf("Deserializing %q: expected %#v; got %#v", test.bytes, test.packet, actualPacket)
+		}
+
+		stm := "Packet.Op()"
+		gotOP := actualPacket.Op()
+		wantOP := test.op
+		if msg, ok := tcore.TAssertInt(stm, int(gotOP), int(wantOP)); !ok {
+			t.Error(msg)
+		}
+
+		stm = "Packet.IsRRQ()"
+		gotB := actualPacket.IsRRQ()
+		wantB := test.op == OpRRQ
+		if msg, ok := tcore.TAssertBool(stm, gotB, wantB); !ok {
+			t.Error(msg)
+		}
+
+		stm = "Packet.IsWRQ()"
+		gotB = actualPacket.IsWRQ()
+		wantB = test.op == OpWRQ
+		if msg, ok := tcore.TAssertBool(stm, gotB, wantB); !ok {
+			t.Error(msg)
+		}
+
+		stm = "Packet.IsData()"
+		gotB = actualPacket.IsData()
+		wantB = test.op == OpData
+		if msg, ok := tcore.TAssertBool(stm, gotB, wantB); !ok {
+			t.Error(msg)
+		}
+
+		stm = "Packet.IsAck()"
+		gotB = actualPacket.IsAck()
+		wantB = test.op == OpAck
+		if msg, ok := tcore.TAssertBool(stm, gotB, wantB); !ok {
+			t.Error(msg)
+		}
+
+		stm = "Packet.IsError()"
+		gotB = actualPacket.IsError()
+		wantB = test.op == OpError
+		if msg, ok := tcore.TAssertBool(stm, gotB, wantB); !ok {
+			t.Error(msg)
 		}
 	}
 }

@@ -1,12 +1,9 @@
-// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
-
-package tfsrv
+package store
 
 import (
+	"github.com/webern/flog"
 	"os"
 	"testing"
-
-	"github.com/webern/flog"
 )
 
 // TestMain runs once and it calls all tests with m.Run()

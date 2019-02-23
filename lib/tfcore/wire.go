@@ -5,8 +5,7 @@ package tfcore
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
-	"fmt"
+	"github.com/webern/flog"
 )
 
 // larger than a typical mtu (1500), and largest DATA packet (516).
@@ -14,19 +13,21 @@ import (
 const MaxPacketSize = 2048
 
 const (
-	OpRRQ   uint16 = 1
-	OpWRQ          = 2
-	OpData         = 3
-	OpAck          = 4
-	OpError        = 5
+	OpRRQ   uint16 = 1 // Read Request
+	OpWRQ          = 2 // Write Request
+	OpData         = 3 // Data Packet
+	OpAck          = 4 // Acknowledgement
+	OpError        = 5 // Error Packet
 )
 
 // Packet is the interface met by all packet structs
 type Packet interface {
 	// Op returns the Op code for this packet
 	Op() uint16
+
 	// Parse parses a packet from its wire representation
 	Parse([]byte) error
+
 	// Serialize serializes a packet to its wire representation
 	Serialize() []byte
 
@@ -126,7 +127,7 @@ func (p *PacketData) Serialize() []byte {
 }
 
 func (p *PacketData) IsRRQ() bool {
-	return true
+	return false
 }
 
 func (p *PacketData) IsWRQ() bool {
@@ -235,14 +236,14 @@ func (p *PacketError) IsAck() bool {
 }
 
 func (p *PacketError) IsError() bool {
-	return false
+	return true
 }
 
 // parseUint16 reads a big-endian uint16 from the beginning of buf,
 // returning it along with a slice pointing at the next position in the buffer.
 func parseUint16(buf []byte) (uint16, []byte, error) {
 	if len(buf) < 2 {
-		return 0, nil, errors.New("packet truncated")
+		return 0, nil, flog.Raise("packet truncated")
 	}
 	return binary.BigEndian.Uint16(buf), buf[2:], nil
 }
@@ -252,7 +253,7 @@ func parseUint16(buf []byte) (uint16, []byte, error) {
 func parseString(buf []byte) (string, []byte, error) {
 	i := bytes.IndexByte(buf, 0)
 	if i < 0 {
-		return "", nil, errors.New("packet truncated")
+		return "", nil, flog.Raise("packet truncated")
 	}
 	return string(buf[:i]), buf[i+1:], nil
 }
@@ -273,7 +274,7 @@ func ParsePacket(buf []byte) (p Packet, err error) {
 	case OpError:
 		p = &PacketError{}
 	default:
-		err = fmt.Errorf("unexpected opcode %d", opcode)
+		err = flog.Raisef("unexpected opcode %d", opcode)
 		return
 	}
 	err = p.Parse(buf)

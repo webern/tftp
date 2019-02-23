@@ -4,8 +4,9 @@ package tfsrv
 
 import (
 	"fmt"
-	"github.com/webern/tftp/lib/tfcore"
 	"net"
+
+	"github.com/webern/tftp/lib/tfcore"
 )
 
 // TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
