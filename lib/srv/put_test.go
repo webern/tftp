@@ -109,7 +109,7 @@ func TestPut(t *testing.T) {
 		h.server = *server
 		h.tftpInfo.OpCode = cor.OpWRQ
 		h.tftpInfo.Filename = filename
-		err := put(h, memStore)
+		_, err := put(h, memStore)
 		if err != nil {
 			flog.Error(err.Error())
 		}
