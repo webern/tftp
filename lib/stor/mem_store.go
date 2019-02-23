@@ -12,15 +12,17 @@ var _ Store = (*memStore)(nil)
 
 // memStore implements the Store interface for storing and retrieving files in a memory cache.
 type memStore struct {
-	mx    sync.RWMutex // protects the files map
-	files map[string][]byte
+	mx         sync.RWMutex      // protects all data fields
+	files      map[string][]byte // stores the files
+	terminated bool              // when true, all functions return an error
 }
 
 // NewMemStore creates a new Store for storing and retrieving files to/from a memory cache.
 func NewMemStore() Store {
 	return &memStore{
-		mx:    sync.RWMutex{},
-		files: make(map[string][]byte),
+		mx:         sync.RWMutex{},
+		files:      make(map[string][]byte),
+		terminated: false,
 	}
 }
 
@@ -28,6 +30,11 @@ func NewMemStore() Store {
 func (m *memStore) Get(name string) (cor.File, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
+
+	if m.terminated {
+		return cor.File{}, flog.Raise("the memStore has been terminated")
+	}
+
 	if b, ok := m.files[name]; ok {
 		f := cor.File{}
 		f.Name = name
@@ -43,6 +50,11 @@ func (m *memStore) Get(name string) (cor.File, error) {
 func (m *memStore) Put(f cor.File) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+
+	if m.terminated {
+		return flog.Raise("the memStore has been terminated")
+	}
+
 	b := make([]byte, len(f.Data), len(f.Data))
 	copy(b, f.Data)
 	m.files[f.Name] = b
@@ -51,5 +63,7 @@ func (m *memStore) Put(f cor.File) error {
 
 // Terminate tells the Store it is about to be destroyed
 func (m *memStore) Terminate() {
-	// nothing to do
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	m.terminated = true
 }
