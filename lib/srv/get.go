@@ -7,19 +7,20 @@ import (
 	"net"
 )
 
-func get(hndshk handshake, store stor.Store) error {
+func get(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
 	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
+
+	if err != nil {
+		_ = sendErr(conn, cor.ErrNotFound, err.Error())
+		return nil, flog.Wrap(err)
+	}
+
 	theFile := cor.File{}
 	theFile.Name = hndshk.tftpInfo.Filename
 	theFile, err = store.Get(theFile.Name)
 
-	if err != nil {
-		_ = sendErr(conn, cor.ErrNotFound, err.Error())
-		return flog.Wrap(err)
-	}
-
 	if err := sendHandshakeAck(conn); err != nil {
-		return flog.Wrap(err)
+		return conn, cor.NewErrf(cor.ErrNotFound, "the file '%s' was not found", hndshk.tftpInfo.Filename)
 	}
 
 	// block 0 is the acknowledgement, block 1 is the first data block
@@ -48,17 +49,17 @@ func get(hndshk handshake, store stor.Store) error {
 
 		n, addr, err := conn.ReadFromUDP(buf)
 		if addr.Port != hndshk.client.Port {
-			return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+			return conn, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 		} else if n <= 0 {
-			return flog.Raisef("bad acknowledgement packet")
+			return conn, flog.Raisef("bad acknowledgement packet")
 		}
 
 		packet, err := cor.ParsePacket(buf)
 
 		if err != nil {
-			return flog.Wrap(err)
+			return conn, flog.Wrap(err)
 		} else if !packet.IsAck() {
-			return flog.Raise("wrong packet type")
+			return conn, flog.Raise("wrong packet type")
 		}
 
 		ack, ok := packet.(*cor.PacketAck)
@@ -68,7 +69,7 @@ func get(hndshk handshake, store stor.Store) error {
 		}
 
 		if ack.BlockNum != uint16(blk) {
-			return flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+			return conn, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 
 		blk++
@@ -87,17 +88,17 @@ func get(hndshk handshake, store stor.Store) error {
 
 		n, addr, err := conn.ReadFromUDP(buf)
 		if addr.Port != hndshk.client.Port {
-			return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+			return conn, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 		} else if n <= 0 {
-			return flog.Raisef("bad acknowledgement packet")
+			return conn, flog.Raisef("bad acknowledgement packet")
 		}
 
 		packet, err := cor.ParsePacket(buf)
 
 		if err != nil {
-			return flog.Wrap(err)
+			return conn, flog.Wrap(err)
 		} else if !packet.IsAck() {
-			return flog.Raise("wrong packet type")
+			return conn, flog.Raise("wrong packet type")
 		}
 
 		ack, ok := packet.(*cor.PacketAck)
@@ -107,9 +108,9 @@ func get(hndshk handshake, store stor.Store) error {
 		}
 
 		if ack.BlockNum != uint16(blk) {
-			return flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+			return conn, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 	}
 
-	return nil
+	return conn, nil
 }

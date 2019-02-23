@@ -64,9 +64,9 @@ func (s *Server) Serve(port uint16) error {
 		handshake, err := waitForHandshake(mainListener)
 
 		if handshake.tftpInfo.IsWRQ() {
-			err = put(handshake, s.store)
+			go doAsyncTransfer(handshake, s.store, put)
 		} else if handshake.tftpInfo.IsRRQ() {
-			err = get(handshake, s.store)
+			go doAsyncTransfer(handshake, s.store, get)
 		} else {
 			go func() {
 				conn, err := net.DialUDP("udp", &handshake.server, &handshake.client)
