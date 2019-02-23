@@ -18,7 +18,8 @@ jobs:
 
       # specify any bash command here prefixed with `run: `
       - run: go get -v -t -d ./...
-      - run: go test -v ./... -coverprofile cover.out && go tool cover cover.out && go tool cover -html cover.out -o cover.html
+      - run: go test -v ./... -coverprofile cover.out && go tool cover -func cover.out -o cover.func.txt && go tool cover -html cover.out -o cover.html
 
       - store_artifacts:
           path: /go/src/github.com/webern/tftp/cover.html
+          path: /go/src/github.com/webern/tftp/cover.func.txt
