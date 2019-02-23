@@ -1,6 +1,8 @@
 In-memory TFTP Server
 =====================
 
+[![CircleCI](https://circleci.com/gh/webern/tftp/tree/master.svg?style=svg)](https://circleci.com/gh/webern/tftp/tree/master)
+
 This is a simple in-memory TFTP server, implemented in Go.  It is
 RFC1350-compliant, but doesn't implement the additions in later RFCs.  In
 particular, options are not recognized.
