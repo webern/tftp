@@ -1,11 +1,11 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package store
+package stor
 
 import (
 	"fmt"
 	"github.com/webern/tcore"
-	"github.com/webern/tftp/lib/tfcore"
+	"github.com/webern/tftp/lib/cor"
 	"math"
 	"testing"
 )
@@ -18,8 +18,8 @@ func makeTestData(size int) []byte {
 	return b
 }
 
-func makeTestFile(name string, size int) tfcore.File {
-	f := tfcore.File{}
+func makeTestFile(name string, size int) cor.File {
+	f := cor.File{}
 	f.Name = name
 	f.Data = makeTestData(size)
 	return f

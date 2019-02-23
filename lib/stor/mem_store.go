@@ -1,10 +1,10 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package store
+package stor
 
 import (
 	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/tfcore"
+	"github.com/webern/tftp/lib/cor"
 	"sync"
 )
 
@@ -25,22 +25,22 @@ func NewMemStore() Store {
 }
 
 // Get returns a file from the store
-func (m *memStore) Get(name string) (tfcore.File, error) {
+func (m *memStore) Get(name string) (cor.File, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
 	if b, ok := m.files[name]; ok {
-		f := tfcore.File{}
+		f := cor.File{}
 		f.Name = name
 		f.Data = make([]byte, len(b), len(b))
 		copy(f.Data, b)
 		return f, nil
 	}
 
-	return tfcore.File{}, flog.Raisef("the file '%s' was not found", name)
+	return cor.File{}, flog.Raisef("the file '%s' was not found", name)
 }
 
 // Put places a file into the Store
-func (m *memStore) Put(f tfcore.File) error {
+func (m *memStore) Put(f cor.File) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	b := make([]byte, len(f.Data), len(f.Data))

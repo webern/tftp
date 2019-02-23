@@ -1,4 +1,6 @@
-package store
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
+package cor
 
 import (
 	"github.com/webern/flog"

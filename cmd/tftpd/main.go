@@ -4,15 +4,16 @@ package main
 
 import (
 	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/tfsrv"
+	"github.com/webern/tftp/lib/srv"
+	"github.com/webern/tftp/lib/stor"
 	"os"
 )
 
 func main() {
 	flog.SetTruncationPath("tftp/")
 	flog.SetLevel(flog.TraceLevel)
-	srvr := tfsrv.NewServer()
-	err := srvr.Serve(9909)
+	srvr := srv.NewServer(stor.NewMemStore())
+	err := srvr.Serve(69)
 
 	if err != nil {
 		flog.Error(err.Error())

@@ -1,6 +1,6 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package tfsrv
+package srv
 
 import (
 	"os"

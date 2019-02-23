@@ -1,6 +1,6 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package tfcore
+package cor
 
 import (
 	"bytes"
@@ -192,7 +192,7 @@ func (p *PacketAck) IsError() bool {
 
 // PacketError is sent by a peer who has encountered an error condition
 type PacketError struct {
-	Code uint16
+	Code ErrCode
 	Msg  string
 }
 
@@ -202,9 +202,11 @@ func (p *PacketError) Op() uint16 {
 
 func (p *PacketError) Parse(buf []byte) (err error) {
 	buf = buf[2:] // skip over op
-	if p.Code, buf, err = parseUint16(buf); err != nil {
+	code := uint16(0)
+	if code, buf, err = parseUint16(buf); err != nil {
 		return err
 	}
+	p.Code = ErrCode(code)
 	if p.Msg, buf, err = parseString(buf); err != nil {
 		return err
 	}
@@ -214,7 +216,7 @@ func (p *PacketError) Parse(buf []byte) (err error) {
 func (p *PacketError) Serialize() []byte {
 	buf := make([]byte, 4+len(p.Msg)+1)
 	binary.BigEndian.PutUint16(buf, OpError)
-	binary.BigEndian.PutUint16(buf[2:], p.Code)
+	binary.BigEndian.PutUint16(buf[2:], uint16(p.Code))
 	copy(buf[4:], p.Msg)
 	return buf
 }
