@@ -12,4 +12,8 @@ type Store interface {
 	// Get returns a file from the Store or an error if it is not found. Get is safe for concurrent goroutine access.
 	// The returned file is a deep copy of the stored file, you may mutate it without affecting the Store.
 	Get(name string) (tfcore.File, error)
+
+	// Terminate informs the Store that it is about to be destroyed, giving the Store time to finish any operations.
+	// Terminate blocks until such operations are complete.
+	Terminate()
 }

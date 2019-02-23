@@ -24,6 +24,7 @@ func NewMemStore() Store {
 	}
 }
 
+// Get returns a file from the store
 func (m *memStore) Get(name string) (tfcore.File, error) {
 	m.mx.RLock()
 	defer m.mx.RUnlock()
@@ -31,12 +32,24 @@ func (m *memStore) Get(name string) (tfcore.File, error) {
 		f := tfcore.File{}
 		f.Name = name
 		f.Data = make([]byte, len(b), len(b))
+		copy(f.Data, b)
 		return f, nil
 	}
 
 	return tfcore.File{}, flog.Raisef("the file '%s' was not found", name)
 }
 
+// Put places a file into the Store
 func (m *memStore) Put(f tfcore.File) error {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	b := make([]byte, len(f.Data), len(f.Data))
+	copy(b, f.Data)
+	m.files[f.Name] = b
 	return nil
+}
+
+// Terminate tells the Store it is about to be destroyed
+func (m *memStore) Terminate() {
+	// nothing to do
 }
