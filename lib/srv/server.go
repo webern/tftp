@@ -60,7 +60,7 @@ func (s *Server) Serve(port uint16) error {
 		handshake, err := waitForHandshake(mainListener)
 		fileChan := make(chan cor.File, 1)
 		memStore := stor.NewMemStore()
-		err = put(handshake, memStore, nil)
+		err = put(handshake, memStore)
 		if err != nil {
 			panic(err)
 		}

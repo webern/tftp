@@ -19,7 +19,7 @@ var packetPool = sync.Pool{
 	},
 }
 
-func put(hndshk handshake, store stor.Store, ready chan<- struct{}) error {
+func put(hndshk handshake, store stor.Store) error {
 	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
 	file := cor.File{}
 	file.Name = hndshk.tftpInfo.Filename
@@ -40,9 +40,6 @@ func put(hndshk handshake, store stor.Store, ready chan<- struct{}) error {
 	memset(buf)
 	defer packetPool.Put(buf)
 
-	// TODO - get rid of didSignalReady, find another way
-	didSignalReady := false
-
 dataLoop:
 	for {
 		// TODO - make timeout wait configurable
@@ -51,13 +48,6 @@ dataLoop:
 
 		if err != nil {
 			return err
-		}
-
-		// TODO - figure out something less stupid for testing
-		if ready != nil && !didSignalReady {
-			// let our caller know we are ready to receive packets
-			didSignalReady = true
-			ready <- struct{}{}
 		}
 
 		n, raddr, err := readWithRetry(conn, 3, buf, blk)

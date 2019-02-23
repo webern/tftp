@@ -16,10 +16,9 @@ import (
 	"github.com/webern/tftp/lib/cor"
 )
 
-var client, _ = net.ResolveUDPAddr("udp", ":12345")
-var server, _ = net.ResolveUDPAddr("udp", ":54321")
-
 func TestSendHandshakeAck(t *testing.T) {
+	var client, _ = net.ResolveUDPAddr("udp", ":54236")
+	var server, _ = net.ResolveUDPAddr("udp", ":32451")
 	receiver, err := net.DialUDP("udp", client, server)
 	sender, err := net.DialUDP("udp", server, client)
 
@@ -92,6 +91,8 @@ func makeTestData(size int) []byte {
 }
 
 func TestPut(t *testing.T) {
+	var client, _ = net.ResolveUDPAddr("udp", ":12985")
+	var server, _ = net.ResolveUDPAddr("udp", ":21985")
 	filename := "testfile.zip"
 	testFile := makeTestData(3671)
 	clientConn, err := net.DialUDP("udp", client, server)
@@ -100,31 +101,22 @@ func TestPut(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	//buf := make([]byte, tfcore.MaxPacketSize)
-	readyForSend := sync.WaitGroup{}
-	readyForSend.Add(1)
-	doneReceiving := sync.WaitGroup{}
-	doneReceiving.Add(1)
-	ready := make(chan struct{})
 	memStore := stor.NewMemStore()
 
 	go func() {
-		defer readyForSend.Done()
 		h := handshake{}
 		h.client = *client
 		h.server = *server
 		h.tftpInfo.OpCode = cor.OpWRQ
 		h.tftpInfo.Filename = filename
-		err := put(h, memStore, ready)
+		err := put(h, memStore)
 		if err != nil {
 			flog.Error(err.Error())
 		}
 	}()
 
-	//readyForSend.Wait()
-
-	<-ready
-	//time.Sleep(50 * time.Millisecond)
+	// TODO - this is lame, how can data race be properly avoided in this test?
+	time.Sleep(50 * time.Millisecond)
 
 	go func() {
 		sendEmptyAtEnd := false
@@ -141,24 +133,11 @@ func TestPut(t *testing.T) {
 			}
 			data.Data = testFile[pos:end]
 			_, err := clientConn.Write(data.Serialize())
-			//time.Sleep(50 * time.Millisecond)
 
 			if err != nil {
 				flog.Error(err.Error())
-				//os.Exit(1)
 			}
 
-			//n, y, err := clientConn.ReadFromUDP(make([]byte, 2048)) // ignore acklowledgement
-			//
-			//if err != nil {
-			//	flog.Error(err.Error())
-			//	os.Exit(1)
-			//} else if n <= 0 {
-			//	flog.Error("no bytes")
-			//	os.Exit(1)
-			//}
-			//
-			//flog.Info(y)
 			blk++
 			pos = end
 		}
@@ -167,11 +146,11 @@ func TestPut(t *testing.T) {
 			data := cor.PacketData{}
 			data.BlockNum = uint16(blk)
 			data.Data = make([]byte, 0)
-			_, _ = clientConn.Write(data.Serialize())
+			_, err = clientConn.Write(data.Serialize())
 
-			//if msg, ok := tcore.TErr("_, err = clientConn.Write(data.Serialize())", err); !ok {
-			//	t.Error(msg)
-			//}
+			if err != nil {
+				flog.Error(err.Error())
+			}
 		}
 	}()
 
