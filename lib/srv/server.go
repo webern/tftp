@@ -8,6 +8,7 @@ import (
 	"github.com/webern/tftp/lib/stor"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/webern/tftp/lib/cor"
@@ -18,36 +19,22 @@ import (
 // TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
 const TftpMaxPacketSize = 1468
 
-// TID represents a 'transfer id' which is actually just two ports, the requester's port and the responder's port.
-type TID struct {
-	RequesterPort uint16
-	ResponderPort uint16
-}
-
-type udpPacket struct {
-	clientAddress *net.UDPAddr
-	rawPayload    []byte
-	parsedPayload cor.Packet
-	numBytes      int
-}
-
-func newUDPPacket(data []byte, bytes_recv int) (packet udpPacket, err error) {
-	packet.numBytes = bytes_recv
-	return packet, nil
-}
-
 type Server struct {
-	store stor.Store
-	lch   chan LogEntry
-	lfile string
+	store  stor.Store
+	lch    chan LogEntry
+	lfile  string
+	conn   *net.UDPConn
+	stopMX sync.RWMutex // protects the stop boolean
+	stop   bool         // tells the Serve function when it should bail out
 }
 
 func NewServer(store stor.Store, logFilename string) Server {
-	return Server{
+	s := Server{
 		store: store,
 		lch:   make(chan LogEntry, 3),
 		lfile: logFilename,
 	}
+	return s
 }
 
 func sendError(conn *net.UDPConn, theError error) error {
@@ -59,15 +46,40 @@ func sendError(conn *net.UDPConn, theError error) error {
 }
 
 func (s *Server) Serve(port uint16) error {
+	defer flog.Trace("stopped")
 	go s.logAsync()
 	mainListener, err := makeListener(port)
 
 	if err != nil {
 		return err
+	} else if mainListener == nil {
+		return flog.Raise("main listening connection could not be opened")
 	}
 
+	s.conn = mainListener
+
 	for {
-		handshake, err := waitForHandshake(mainListener)
+
+		s.stopMX.RLock()
+		if s.stop {
+			s.stopMX.RUnlock()
+			return nil
+		}
+		s.stopMX.RUnlock()
+
+		handshake, err := waitForHandshake(s.conn)
+
+		s.stopMX.RLock()
+		if s.stop {
+			s.stopMX.RUnlock()
+			return nil
+		}
+		s.stopMX.RUnlock()
+
+		if err != nil {
+			return err
+		}
+
 		l := LogEntry{
 			Start: time.Now(),
 		}
@@ -95,21 +107,36 @@ func (s *Server) Serve(port uint16) error {
 		}
 
 		if err != nil {
-			panic(err)
+			return err
 		}
-
 	}
 
 	return nil
 }
 
 func (s *Server) Stop() error {
+	defer flog.Trace("stopped")
+	var err error
+	s.stopMX.Lock()
+	defer s.stopMX.Unlock()
+	s.stop = true
+
+	if s.conn != nil {
+		err = s.conn.Close()
+		s.conn = nil
+	}
+
 	close(s.lch)
-	return nil
+
+	if s.store != nil {
+		s.store.Terminate()
+	}
+
+	return err
 }
 
 func (s *Server) logAsync() {
-	defer flog.Trace("logging goroutine exit")
+	defer flog.Trace("exit")
 	lfile, err := os.Create(s.lfile)
 
 	if err != nil {

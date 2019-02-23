@@ -11,21 +11,21 @@ import (
 	"github.com/webern/tftp/lib/cor"
 )
 
-func makeListener(port uint16) (net.UDPConn, error) {
+func makeListener(port uint16) (*net.UDPConn, error) {
 	strAddr := fmt.Sprintf(":%d", port)
 	uaddr, err := net.ResolveUDPAddr("udp", strAddr)
 
 	if err != nil {
-		return net.UDPConn{}, err
+		return &net.UDPConn{}, err
 	}
 
 	uconn, err := net.ListenUDP("udp", uaddr)
 
 	if err != nil {
-		return net.UDPConn{}, err
+		return &net.UDPConn{}, err
 	}
 
-	return *uconn, err
+	return uconn, err
 }
 
 var handshakePool = sync.Pool{
@@ -43,14 +43,13 @@ var handshakePool = sync.Pool{
 // if an acceptable packet is received, a handshake object is returned representing the client's declared address (i.e.
 // port) for the transfer and the requested operation. the server's declared address (i.e. port) for the transfer is
 // not established by this function.
-func waitForHandshake(conn net.UDPConn) (handshake, error) {
+func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 	buf := handshakePool.Get().([]byte)
 	defer handshakePool.Put(buf)
 	memset(buf)
 	numBytes, ua, err := conn.ReadFromUDP(buf)
 
 	if err != nil {
-
 		return handshake{}, flog.Wrap(err)
 	} else if ua == nil || numBytes <= 0 {
 		return handshake{}, flog.Raise("unable to receive the udp packet")

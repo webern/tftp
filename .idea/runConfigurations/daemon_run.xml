@@ -1,12 +1,13 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="daemon run" type="GoApplicationRunConfiguration" factoryName="Go Application">
     <module name="tftp" />
-    <working_directory value="$PROJECT_DIR$/" />
+    <working_directory value="$PROJECT_DIR$/build" />
     <go_parameters value="-i" />
     <kind value="PACKAGE" />
     <filePath value="$PROJECT_DIR$/tf" />
     <package value="github.com/webern/tftp/cmd/tftpd" />
     <directory value="$PROJECT_DIR$/" />
+    <output_directory value="$PROJECT_DIR$/build" />
     <method v="2" />
   </configuration>
 </component>
