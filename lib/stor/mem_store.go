@@ -65,5 +65,6 @@ func (m *memStore) Put(f cor.File) error {
 func (m *memStore) Terminate() {
 	m.mx.Lock()
 	defer m.mx.Unlock()
+	defer flog.Trace("terminated")
 	m.terminated = true
 }
