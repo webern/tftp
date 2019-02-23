@@ -4,9 +4,10 @@ package tfsrv
 
 import (
 	"fmt"
+	"github.com/webern/tftp/lib/stor"
 	"net"
 
-	"github.com/webern/tftp/lib/tfcore"
+	"github.com/webern/tftp/lib/cor"
 )
 
 // TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
@@ -23,7 +24,7 @@ type TID struct {
 type udpPacket struct {
 	clientAddress *net.UDPAddr
 	rawPayload    []byte
-	parsedPayload tfcore.Packet
+	parsedPayload cor.Packet
 	numBytes      int
 }
 
@@ -40,8 +41,8 @@ func NewServer() Server {
 }
 
 func sendError(conn *net.UDPConn, theError error) error {
-	pktErr := tfcore.PacketError{}
-	pktErr.Code = tfcore.OpError
+	pktErr := cor.PacketError{}
+	pktErr.Code = cor.OpError
 	pktErr.Msg = theError.Error()
 	_, err := conn.Write(pktErr.Serialize())
 	return err
@@ -57,8 +58,9 @@ func (s *Server) Serve(port uint16) error {
 
 	for {
 		handshake, err := waitForHandshake(mainListener)
-		fileChan := make(chan tfcore.File, 1)
-		err = put(handshake, fileChan, nil)
+		fileChan := make(chan cor.File, 1)
+		memStore := stor.NewMemStore()
+		err = put(handshake, memStore, nil)
 		if err != nil {
 			panic(err)
 		}

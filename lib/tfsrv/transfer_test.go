@@ -4,14 +4,16 @@ package tfsrv
 
 import (
 	"fmt"
+	"github.com/webern/tftp/lib/stor"
 	"math"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/webern/flog"
 	"github.com/webern/tcore"
-	"github.com/webern/tftp/lib/tfcore"
+	"github.com/webern/tftp/lib/cor"
 )
 
 var client, _ = net.ResolveUDPAddr("udp", ":12345")
@@ -25,7 +27,7 @@ func TestSendHandshakeAck(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	buf := make([]byte, tfcore.MaxPacketSize)
+	buf := make([]byte, cor.MaxPacketSize)
 	readyForSend := sync.WaitGroup{}
 	readyForSend.Add(1)
 	doneReceiving := sync.WaitGroup{}
@@ -54,7 +56,7 @@ func TestSendHandshakeAck(t *testing.T) {
 	readyForSend.Wait()
 	err = sendHandshakeAck(sender)
 	doneReceiving.Wait()
-	packet, err := tfcore.ParsePacket(buf)
+	packet, err := cor.ParsePacket(buf)
 
 	if err != nil {
 		t.Errorf("a malformed packet was sent: %s", err.Error())
@@ -65,11 +67,11 @@ func TestSendHandshakeAck(t *testing.T) {
 		return
 	}
 
-	if packet.Op() != tfcore.OpAck {
-		t.Errorf("the wrong op type was received: want %d, got %d", tfcore.OpAck, packet.Op())
+	if packet.Op() != cor.OpAck {
+		t.Errorf("the wrong op type was received: want %d, got %d", cor.OpAck, packet.Op())
 	}
 
-	ack, ok := packet.(*tfcore.PacketAck)
+	ack, ok := packet.(*cor.PacketAck)
 
 	if !ok || ack == nil {
 		t.Error("the ack packet could not be downcast to the correct type")
@@ -103,17 +105,17 @@ func TestPut(t *testing.T) {
 	readyForSend.Add(1)
 	doneReceiving := sync.WaitGroup{}
 	doneReceiving.Add(1)
-	ch := make(chan tfcore.File, 2)
 	ready := make(chan struct{})
+	memStore := stor.NewMemStore()
 
 	go func() {
 		defer readyForSend.Done()
 		h := handshake{}
 		h.client = *client
 		h.server = *server
-		h.tftpInfo.OpCode = tfcore.OpWRQ
+		h.tftpInfo.OpCode = cor.OpWRQ
 		h.tftpInfo.Filename = filename
-		err := put(h, ch, ready)
+		err := put(h, memStore, ready)
 		if err != nil {
 			flog.Error(err.Error())
 		}
@@ -128,9 +130,9 @@ func TestPut(t *testing.T) {
 		sendEmptyAtEnd := false
 		blk := 1
 		for pos := 0; pos < len(testFile); {
-			data := tfcore.PacketData{}
+			data := cor.PacketData{}
 			data.BlockNum = uint16(blk)
-			end := pos + tfcore.BlockSize
+			end := pos + cor.BlockSize
 			if end > len(testFile) {
 				end = len(testFile)
 				sendEmptyAtEnd = false
@@ -162,41 +164,53 @@ func TestPut(t *testing.T) {
 		}
 
 		if sendEmptyAtEnd {
-			data := tfcore.PacketData{}
+			data := cor.PacketData{}
 			data.BlockNum = uint16(blk)
 			data.Data = make([]byte, 0)
-			clientConn.Write(data.Serialize())
-			//clientConn.ReadFromUDP(make([]byte, 100)) // ignore acklowledgement
+			_, _ = clientConn.Write(data.Serialize())
+
+			//if msg, ok := tcore.TErr("_, err = clientConn.Write(data.Serialize())", err); !ok {
+			//	t.Error(msg)
+			//}
 		}
 	}()
 
-	file := <-ch
+	// TODO - this is lame, how can data race be properly avoided in this test?
+	time.Sleep(500 * time.Millisecond)
+	gotFile, err := memStore.Get(filename)
 
-	stm := "file.Name"
-	gotS := file.Name
+	if msg, ok := tcore.TErr("gotFile, err := memStore.Get(filename)", err); !ok {
+		t.Error(msg)
+	}
+
+	stm := "gotFile.Name"
+	gotS := gotFile.Name
 	wantS := filename
 	if msg, ok := tcore.TAssertString(stm, gotS, wantS); !ok {
 		t.Error(msg)
 	}
 
-	stm = "len(file.Data)"
-	gotI := len(file.Data)
+	stm = "len(gotFile.Data)"
+	gotI := len(gotFile.Data)
 	wantI := len(testFile)
 	if msg, ok := tcore.TAssertInt(stm, gotI, wantI); !ok {
 		t.Error(msg)
+		return // avoid panic in the comparison loop
 	}
 
-	l := len(file.Data)
-	if len(testFile) < l {
-		l = len(testFile)
-	}
-
-	for i := 0; i < l; i++ {
-		stm = fmt.Sprintf("int(file.Data[%d])", i)
-		gotI = int(file.Data[i])
+	errCount := 0
+	for i := 0; i < len(gotFile.Data); i++ {
+		stm = fmt.Sprintf("int(gotFile.Data[%d])", i)
+		gotI = int(gotFile.Data[i])
 		wantI = int(testFile[i])
 		if msg, ok := tcore.TAssertInt(stm, gotI, wantI); !ok {
 			t.Error(msg)
+			errCount++
+		}
+
+		if errCount > 10 {
+			t.Error("more than 10 errors, stopping this loop")
+			break
 		}
 	}
 }

@@ -3,24 +3,25 @@
 package tfsrv
 
 import (
+	"github.com/webern/tftp/lib/stor"
 	"io"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/tfcore"
+	"github.com/webern/tftp/lib/cor"
 )
 
 var packetPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, tfcore.MaxPacketSize)
+		return make([]byte, cor.MaxPacketSize)
 	},
 }
 
-func put(hndshk handshake, ch chan<- tfcore.File, ready chan<- struct{}) error {
+func put(hndshk handshake, store stor.Store, ready chan<- struct{}) error {
 	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
-	file := tfcore.File{}
+	file := cor.File{}
 	file.Name = hndshk.tftpInfo.Filename
 	file.Data = make([]byte, 0)
 
@@ -65,7 +66,7 @@ dataLoop:
 			return err
 		}
 
-		packet, err := tfcore.ParsePacket(buf[:n])
+		packet, err := cor.ParsePacket(buf[:n])
 
 		if err != nil {
 			return err
@@ -88,7 +89,13 @@ dataLoop:
 		blk++
 	}
 
-	ch <- file
+	err = store.Put(file)
+
+	if err != nil {
+		// TODO handle err for real
+		return err
+	}
+
 	return nil
 }
 
@@ -97,7 +104,7 @@ func sendHandshakeAck(conn *net.UDPConn) error {
 }
 
 func sendAck(conn *net.UDPConn, block int) error {
-	ack := tfcore.PacketAck{}
+	ack := cor.PacketAck{}
 	ack.BlockNum = uint16(block)
 	_, err := conn.Write(ack.Serialize())
 
@@ -148,8 +155,8 @@ func readWithRetry(conn *net.UDPConn, retries int, ioBuf []byte, lastSuccessfulB
 	return numBytes, raddr, err
 }
 
-func handleData(conn *net.UDPConn, packet tfcore.Packet, expectedBlock int) ([]byte, error) {
-	dataPacket, ok := packet.(*tfcore.PacketData)
+func handleData(conn *net.UDPConn, packet cor.Packet, expectedBlock int) ([]byte, error) {
+	dataPacket, ok := packet.(*cor.PacketData)
 
 	if !ok {
 		return nil, flog.Raise("the packet is not a data packet")
@@ -168,14 +175,14 @@ func handleData(conn *net.UDPConn, packet tfcore.Packet, expectedBlock int) ([]b
 	}
 
 	// check if this is the last received data packet
-	if len(dataPacket.Data) < tfcore.BlockSize {
+	if len(dataPacket.Data) < cor.BlockSize {
 		return copied, io.EOF
 	}
 
 	return copied, nil
 }
 
-func verifyDataPacket(packet tfcore.Packet, hndshk handshake, currentAddr *net.UDPAddr) error {
+func verifyDataPacket(packet cor.Packet, hndshk handshake, currentAddr *net.UDPAddr) error {
 	if packet.IsError() {
 		return flog.Raise("error received from client")
 	} else if !packet.IsData() {
