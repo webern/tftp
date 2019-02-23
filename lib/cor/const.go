@@ -20,3 +20,28 @@ const (
 	ErrDupFile          = 6 // File already exists.
 	ErrUnkUser          = 7 // No such user.
 )
+
+func (e ErrCode) String() string {
+	switch e {
+	case ErrUnknown:
+		return "E_UNKNOWN"
+	case ErrNotFound:
+		return "E_NOT_FOUND"
+	case ErrAccess:
+		return "E_ACCESS"
+	case ErrDisk:
+		return "E_DISK"
+	case ErrBadOp:
+		return "E_BAD_OP"
+	case ErrBadID:
+		return "E_BAD_ID"
+	case ErrDupFile:
+		return "E_DUP_FILE"
+	case ErrUnkUser:
+		return "E_UNK_USER"
+	default:
+		break
+	}
+
+	return "E_UNKNOWN"
+}

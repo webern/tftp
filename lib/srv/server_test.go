@@ -9,7 +9,7 @@ import (
 
 func TestServer(t *testing.T) {
 
-	srvr := NewServer(stor.NewMemStore())
+	srvr := NewServer(stor.NewMemStore(), "conn.log")
 	go srvr.Serve(9909)
 	defer srvr.Stop()
 

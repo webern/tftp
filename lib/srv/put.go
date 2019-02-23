@@ -19,10 +19,10 @@ var packetPool = sync.Pool{
 	},
 }
 
-type TransferFunc = func(hndshk handshake, store stor.Store) (*net.UDPConn, error)
+type TransferFunc = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
 
-func doAsyncTransfer(hndshk handshake, store stor.Store, f TransferFunc) {
-	conn, err := f(hndshk, store)
+func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f TransferFunc) {
+	conn, n, err := f(hndshk, store)
 
 	if err != nil {
 		switch e := err.(type) {
@@ -32,7 +32,7 @@ func doAsyncTransfer(hndshk handshake, store stor.Store, f TransferFunc) {
 					_ = e.Send(conn)
 				}
 
-				// TODO - log to file
+				l.Error = e
 			}
 		default:
 			{
@@ -41,27 +41,33 @@ func doAsyncTransfer(hndshk handshake, store stor.Store, f TransferFunc) {
 					_ = wr.Send(conn)
 				}
 
-				// TODO - log to file
+				l.Error = wr
 			}
 		}
+	} else {
+		l.Bytes = n
 	}
 
-	// TODO - log to file
+	l.Duration = time.Since(l.Start)
+	l.Client = hndshk.client
+	l.File = hndshk.tftpInfo.Filename
+	l.Op = hndshk.tftpInfo.Op()
+	lch <- l
 }
 
-func put(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
-	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
+func put(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error) {
+	conn, err = net.DialUDP("udp", &hndshk.server, &hndshk.client)
 
 	if err != nil {
-		return nil, flog.Wrap(err)
+		return nil, 0, flog.Wrap(err)
 	}
 
-	file := cor.File{}
-	file.Name = hndshk.tftpInfo.Filename
-	file.Data = make([]byte, 0)
+	theFile := cor.File{}
+	theFile.Name = hndshk.tftpInfo.Filename
+	theFile.Data = make([]byte, 0)
 
 	if err := sendHandshakeAck(conn); err != nil {
-		return conn, flog.Wrap(err)
+		return conn, 0, flog.Wrap(err)
 	}
 
 	// block 0 is the acknowledgement, block 1 is the first data block
@@ -78,30 +84,30 @@ dataLoop:
 		err := conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
 		if err != nil {
-			return conn, err
+			return conn, 0, err
 		}
 
 		n, raddr, err := readWithRetry(conn, 3, buf, blk)
 
 		if err != nil {
-			return conn, err
+			return conn, 0, err
 		}
 
 		packet, err := cor.ParsePacket(buf[:n])
 
 		if err != nil {
-			return conn, err
+			return conn, 0, err
 		}
 
 		// check a bunch of possible error conditions
 		err = verifyDataPacket(packet, hndshk, raddr)
 
 		if err != nil {
-			return conn, err
+			return conn, 0, err
 		}
 
 		chunk, err := handleData(conn, packet, blk)
-		file.Data = append(file.Data, chunk...)
+		theFile.Data = append(theFile.Data, chunk...)
 
 		if err == io.EOF {
 			break dataLoop
@@ -110,13 +116,14 @@ dataLoop:
 		blk++
 	}
 
-	err = store.Put(file)
+	numBytes = len(theFile.Data)
+	err = store.Put(theFile)
 
 	if err != nil {
-		return conn, err
+		return conn, 0, err
 	}
 
-	return conn, nil
+	return conn, numBytes, nil
 }
 
 func sendHandshakeAck(conn *net.UDPConn) error {
