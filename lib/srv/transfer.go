@@ -1,6 +1,6 @@
 // Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
 
-package tfsrv
+package srv
 
 import (
 	"github.com/webern/tftp/lib/stor"
@@ -107,6 +107,19 @@ func sendAck(conn *net.UDPConn, block int) error {
 	ack := cor.PacketAck{}
 	ack.BlockNum = uint16(block)
 	_, err := conn.Write(ack.Serialize())
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func sendErr(conn *net.UDPConn, code cor.ErrCode, message string) error {
+	ePacket := cor.PacketError{}
+	ePacket.Code = code
+	ePacket.Msg = message
+	_, err := conn.Write(ePacket.Serialize())
 
 	if err != nil {
 		return err
