@@ -22,4 +22,5 @@ jobs:
 
       - store_artifacts:
           path: /go/src/github.com/webern/tftp/cover.html
+      - store_artifacts:
           path: /go/src/github.com/webern/tftp/cover.func.txt
