@@ -13,7 +13,7 @@ func main() {
 	flog.SetTruncationPath("tftp/")
 	flog.SetLevel(flog.TraceLevel)
 	srvr := srv.NewServer(stor.NewMemStore())
-	err := srvr.Serve(9909)
+	err := srvr.Serve(69)
 
 	if err != nil {
 		flog.Error(err.Error())
