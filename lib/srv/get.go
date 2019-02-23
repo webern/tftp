@@ -1,27 +1,36 @@
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
 package srv
 
 import (
+	"fmt"
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
 	"github.com/webern/tftp/lib/stor"
 	"net"
 )
 
-func get(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
-	conn, err := net.DialUDP("udp", &hndshk.server, &hndshk.client)
+func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error) {
+	conn, err = net.DialUDP("udp", &hndshk.server, &hndshk.client)
 
 	if err != nil {
 		_ = sendErr(conn, cor.ErrNotFound, err.Error())
-		return nil, flog.Wrap(err)
+		return nil, 0, flog.Wrap(err)
 	}
 
 	theFile := cor.File{}
 	theFile.Name = hndshk.tftpInfo.Filename
 	theFile, err = store.Get(theFile.Name)
 
-	if err := sendHandshakeAck(conn); err != nil {
-		return conn, cor.NewErrf(cor.ErrNotFound, "the file '%s' was not found", hndshk.tftpInfo.Filename)
+	if err != nil {
+		return conn, 0, cor.NewErr(cor.ErrNotFound, fmt.Sprintf("the file '%s' could not be found", hndshk.tftpInfo.Filename))
 	}
+
+	if err := sendHandshakeAck(conn); err != nil {
+		return conn, 0, cor.NewErrf(cor.ErrUnknown, "acknowledgement packet could not be sent")
+	}
+
+	numBytes = len(theFile.Data)
 
 	// block 0 is the acknowledgement, block 1 is the first data block
 	blk := 1
@@ -44,32 +53,32 @@ func get(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
 		_, err := conn.Write(data.Serialize())
 
 		if err != nil {
-			flog.Error(err.Error())
+			return conn, 0, flog.Wrap(err)
 		}
 
 		n, addr, err := conn.ReadFromUDP(buf)
 		if addr.Port != hndshk.client.Port {
-			return conn, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+			return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 		} else if n <= 0 {
-			return conn, flog.Raisef("bad acknowledgement packet")
+			return conn, 0, flog.Raisef("bad acknowledgement packet")
 		}
 
 		packet, err := cor.ParsePacket(buf)
 
 		if err != nil {
-			return conn, flog.Wrap(err)
+			return conn, 0, flog.Wrap(err)
 		} else if !packet.IsAck() {
-			return conn, flog.Raise("wrong packet type")
+			return conn, 0, flog.Raise("wrong packet type")
 		}
 
 		ack, ok := packet.(*cor.PacketAck)
 
 		if !ok {
-			flog.Bug()
+			return conn, 0, flog.Raise("bug, could not downcast packet")
 		}
 
 		if ack.BlockNum != uint16(blk) {
-			return conn, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+			return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 
 		blk++
@@ -88,17 +97,17 @@ func get(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
 
 		n, addr, err := conn.ReadFromUDP(buf)
 		if addr.Port != hndshk.client.Port {
-			return conn, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+			return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 		} else if n <= 0 {
-			return conn, flog.Raisef("bad acknowledgement packet")
+			return conn, 0, flog.Raisef("bad acknowledgement packet")
 		}
 
 		packet, err := cor.ParsePacket(buf)
 
 		if err != nil {
-			return conn, flog.Wrap(err)
+			return conn, 0, flog.Wrap(err)
 		} else if !packet.IsAck() {
-			return conn, flog.Raise("wrong packet type")
+			return conn, 0, flog.Raise("wrong packet type")
 		}
 
 		ack, ok := packet.(*cor.PacketAck)
@@ -108,9 +117,9 @@ func get(hndshk handshake, store stor.Store) (*net.UDPConn, error) {
 		}
 
 		if ack.BlockNum != uint16(blk) {
-			return conn, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+			return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 	}
 
-	return conn, nil
+	return conn, numBytes, nil
 }

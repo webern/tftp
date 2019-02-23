@@ -1,10 +1,11 @@
+// Copyright (c) 2019 by Matthew James Briggs, https://github.com/webern
+
 package cor
 
 import (
 	"fmt"
 	"github.com/webern/flog"
 	"net"
-	"strconv"
 )
 
 type Err struct {
@@ -13,17 +14,26 @@ type Err struct {
 }
 
 func (e *Err) Error() string {
-	return e.location + " - error - " + e.packet.Msg
+	return fmt.Sprintf("%s: %s, location: %s", e.packet.Code.String(), e.packet.Msg, e.location)
 }
 
 func (e *Err) Send(conn *net.UDPConn) error {
-	flog.NotImplemented()
-	return flog.Raise("not implemented")
+	_, err := conn.Write(e.packet.Serialize())
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (e *Err) Code() ErrCode {
+	return e.packet.Code
 }
 
 func NewErr(code ErrCode, message string) *Err {
 	e := Err{}
-	e.packet.Msg = "Err " + strconv.Itoa(int(code)) + " " + message
+	e.packet.Msg = message
 	e.packet.Code = code
 	e.location = flog.Caller(2)
 	return &e
@@ -31,12 +41,16 @@ func NewErr(code ErrCode, message string) *Err {
 
 func NewErrf(code ErrCode, messageFmt string, args ...interface{}) error {
 	e := Err{}
-	e.packet.Msg = "Err " + strconv.Itoa(int(code)) + " " + fmt.Sprintf(messageFmt, args...)
+	e.packet.Msg = fmt.Sprintf(messageFmt, args...)
 	e.packet.Code = code
 	e.location = flog.Caller(2)
 	return &e
 }
 
 func NewErrWrap(err error) *Err {
-	return NewErr(ErrUnknown, err.Error())
+	e := Err{}
+	e.packet.Msg = err.Error()
+	e.packet.Code = ErrUnknown
+	e.location = flog.Caller(2)
+	return &e
 }
