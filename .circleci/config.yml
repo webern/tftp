@@ -8,7 +8,7 @@ jobs:
       only:
         - master
         - develop
-        - feature/*
+        - /feature/
     docker:
       # specify the version
       - image: circleci/golang:1.11
