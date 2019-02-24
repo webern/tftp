@@ -33,8 +33,6 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	}
 
 	numBytes = len(theFile.Data)
-
-	// block 0 is the acknowledgement, block 1 is the first data block
 	blk := 1
 
 	buf := packetPool.Get().([]byte)
@@ -43,51 +41,16 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	sendEmptyAtEnd := len(theFile.Data)%cor.BlockSize == 0
 
 	for pos := 0; pos < len(theFile.Data); {
-		data := cor.PacketData{}
-		data.BlockNum = uint16(blk)
 		end := pos + cor.BlockSize
 
 		if end > len(theFile.Data) {
 			end = len(theFile.Data)
 		}
 
-		data.Data = theFile.Data[pos:end]
-		_, err := conn.Write(data.Serialize())
+		err := sendDataPacket(hndshk, blk, conn, &theFile, pos, buf)
 
 		if err != nil {
 			return conn, 0, flog.Wrap(err)
-		}
-
-		n, addr, err := conn.ReadFromUDP(buf)
-
-		if err != nil {
-			return conn, 0, flog.Wrap(err)
-		}
-
-		if addr.Port != hndshk.client.Port {
-			return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
-		}
-
-		if n <= 0 {
-			return conn, 0, flog.Raisef("bad acknowledgement packet")
-		}
-
-		packet, err := cor.ParsePacket(buf)
-
-		if err != nil {
-			return conn, 0, flog.Wrap(err)
-		} else if !packet.IsAck() {
-			return conn, 0, flog.Raise("wrong packet type")
-		}
-
-		ack, ok := packet.(*cor.PacketAck)
-
-		if !ok {
-			return conn, 0, flog.Raise("bug, could not downcast packet")
-		}
-
-		if ack.BlockNum != uint16(blk) {
-			return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 
 		blk++
@@ -95,67 +58,44 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	}
 
 	if sendEmptyAtEnd {
-		data := cor.PacketData{}
-		data.BlockNum = uint16(blk)
-		data.Data = make([]byte, 0)
-		_, err = conn.Write(data.Serialize())
-
-		if err != nil {
-			flog.Error(err.Error())
-		}
-
-		n, addr, err := conn.ReadFromUDP(buf)
-		if addr.Port != hndshk.client.Port {
-			return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
-		} else if n <= 0 {
-			return conn, 0, flog.Raisef("bad acknowledgement packet")
-		}
-
-		packet, err := cor.ParsePacket(buf)
+		err := sendEmptyEnding(hndshk, blk, conn, buf)
 
 		if err != nil {
 			return conn, 0, flog.Wrap(err)
-		} else if !packet.IsAck() {
-			return conn, 0, flog.Raise("wrong packet type")
-		}
-
-		ack, ok := packet.(*cor.PacketAck)
-
-		if !ok {
-			flog.Bug()
-		}
-
-		if ack.BlockNum != uint16(blk) {
-			return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
 		}
 	}
 
 	return conn, numBytes, nil
 }
 
-func sendEmptyEnding(block int, conn *net.UDPConn) error {
+func sendEmptyEnding(hndshk handshake, block int, conn *net.UDPConn, buf []byte) error {
 	data := cor.PacketData{}
-	data.BlockNum = uint16(blk)
+	data.BlockNum = uint16(block)
 	data.Data = make([]byte, 0)
-	_, err = conn.Write(data.Serialize())
+	_, err := conn.Write(data.Serialize())
 
 	if err != nil {
-		flog.Error(err.Error())
+		return err
 	}
 
 	n, addr, err := conn.ReadFromUDP(buf)
+
 	if addr.Port != hndshk.client.Port {
-		return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
-	} else if n <= 0 {
-		return conn, 0, flog.Raisef("bad acknowledgement packet")
+		return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+	}
+
+	if n <= 0 {
+		return flog.Raisef("bad acknowledgement packet")
 	}
 
 	packet, err := cor.ParsePacket(buf)
 
 	if err != nil {
-		return conn, 0, flog.Wrap(err)
-	} else if !packet.IsAck() {
-		return conn, 0, flog.Raise("wrong packet type")
+		return flog.Wrap(err)
+	}
+
+	if !packet.IsAck() {
+		return flog.Raise("wrong packet type")
 	}
 
 	ack, ok := packet.(*cor.PacketAck)
@@ -164,7 +104,63 @@ func sendEmptyEnding(block int, conn *net.UDPConn) error {
 		flog.Bug()
 	}
 
-	if ack.BlockNum != uint16(blk) {
-		return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+	if ack.BlockNum != uint16(block) {
+		return flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, block)
 	}
+
+	return nil
+}
+
+func sendDataPacket(hndshk handshake, blk int, conn *net.UDPConn, theFile *cor.File, pos int, buf []byte) error {
+	data := cor.PacketData{}
+	data.BlockNum = uint16(blk)
+	end := pos + cor.BlockSize
+
+	if end > len(theFile.Data) {
+		end = len(theFile.Data)
+	}
+
+	data.Data = theFile.Data[pos:end]
+	_, err := conn.Write(data.Serialize())
+
+	if err != nil {
+		return err
+	}
+
+	n, addr, err := conn.ReadFromUDP(buf)
+
+	if err != nil {
+		return err
+	}
+
+	if addr.Port != hndshk.client.Port {
+		return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+	}
+
+	if n <= 0 {
+		return flog.Raisef("bad acknowledgement packet")
+	}
+
+	packet, err := cor.ParsePacket(buf)
+
+	if err != nil {
+		return flog.Wrap(err)
+	}
+
+	if !packet.IsAck() {
+		return flog.Raise("wrong packet type")
+	}
+
+	ack, ok := packet.(*cor.PacketAck)
+
+	if !ok {
+		return flog.Raise("bug, could not downcast packet")
+	}
+
+	if ack.BlockNum != uint16(blk) {
+		return flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+
+	}
+
+	return nil
 }

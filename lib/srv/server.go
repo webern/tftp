@@ -15,7 +15,7 @@ import (
 	"github.com/webern/tftp/lib/cor"
 )
 
-// TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
+// TftpMaxPacketSize is the practical limit of the size of a UDP
 // packet, which is the size of an Ethernet MTU minus the headers of
 // TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
 const TftpMaxPacketSize = 1468
@@ -37,10 +37,12 @@ type Server struct {
 	store   stor.Store    // stores and retrieves files by name
 	lch     chan LogEntry // log entries will be sent to this channel for the connection log
 	conn    *net.UDPConn  // is nil until Serve is called
-	stopMX  sync.RWMutex  // protects the stop boolean
+	stopMX  *sync.RWMutex // protects the stop boolean
 	stop    bool          // tells the Serve function when it should bail out
 }
 
+// NewServer creates a new TFTP server. The Store is injected.
+// After NewServer, you should set Port and Verbose if you do not want the defaults.
 func NewServer(store stor.Store) Server {
 	s := Server{
 		Port:    69,
@@ -48,7 +50,7 @@ func NewServer(store stor.Store) Server {
 		store:   store,
 		lch:     make(chan LogEntry, logChanDepth),
 		conn:    nil,
-		stopMX:  sync.RWMutex{},
+		stopMX:  new(sync.RWMutex),
 		stop:    false,
 	}
 	return s
@@ -62,6 +64,8 @@ func sendError(conn *net.UDPConn, theError error) error {
 	return err
 }
 
+// Serve listens for incoming UDP TFTP connections and responds to them. Serve blocks until server.Stop is called
+// by another goroutine. It is recommended to run Serve in its own goroutine due to its blocking nature.
 func (s *Server) Serve() error {
 	defer flog.Trace("stopped")
 	go s.logAsync()
@@ -128,6 +132,7 @@ func (s *Server) Serve() error {
 	// unreachable
 }
 
+// Stop will stop the server and cause server.Serve() to exit
 func (s *Server) Stop() error {
 	defer flog.Trace("stopped")
 	var err error
@@ -149,6 +154,7 @@ func (s *Server) Stop() error {
 	return err
 }
 
+// logAsync runs on its own goroutine, receiving and writing connection logs
 func (s *Server) logAsync() {
 	defer flog.Trace("exit")
 	var lfile *os.File

@@ -54,7 +54,9 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 
 	if err != nil {
 		return handshake{}, flog.Wrap(err)
-	} else if ua == nil || numBytes <= 0 {
+	}
+
+	if ua == nil || numBytes <= 0 {
 		return handshake{}, flog.Raise("unable to receive the udp packet")
 	}
 
@@ -62,7 +64,9 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 
 	if err != nil {
 		return handshake{}, flog.Wrap(err)
-	} else if pkt == nil {
+	}
+
+	if pkt == nil {
 		return handshake{}, flog.Raise("nil packet received from wire.ParsePacket")
 	}
 
@@ -89,15 +93,18 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 	return handshk, nil
 }
 
+// memset sets all bytes to zero
 func memset(b []byte) {
 	for i := 0; i < len(b); i++ {
 		b[i] = 0
 	}
 }
 
-type TransferFunc = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
+// transferFunction is a type alias for get and put, which both share the logic in doAsyncTransfer
+type transferFunction = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
 
-func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f TransferFunc) {
+// doAsyncTransfer wraps both the get and put functions with error handling and logging stuff
+func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f transferFunction) {
 	conn, n, err := f(hndshk, store)
 
 	if err != nil {
