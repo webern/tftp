@@ -3,6 +3,7 @@
     <module name="tftp" />
     <working_directory value="$PROJECT_DIR$/build" />
     <go_parameters value="-i" />
+    <parameters value="--verbose --logfile=&quot;hello.log&quot; --port 10201" />
     <kind value="PACKAGE" />
     <filePath value="$PROJECT_DIR$/tf" />
     <package value="github.com/webern/tftp/cmd/tftpd" />

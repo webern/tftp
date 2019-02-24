@@ -3,14 +3,16 @@
 package srv
 
 import (
-	"github.com/webern/tftp/lib/stor"
 	"testing"
+
+	"github.com/webern/tftp/lib/stor"
 )
 
 func TestServer(t *testing.T) {
 
-	srvr := NewServer(stor.NewMemStore(), "conn.log")
-	go srvr.Serve(9909)
+	srvr := NewServer(stor.NewMemStore())
+	srvr.Port = 9909
+	go srvr.Serve()
 	defer srvr.Stop()
 
 	// TODO - run actual server tests

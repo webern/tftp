@@ -3,11 +3,12 @@
 package srv
 
 import (
-	"github.com/webern/tftp/lib/stor"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/webern/tftp/lib/stor"
 
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
@@ -79,14 +80,6 @@ func put(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 
 dataLoop:
 	for {
-		// TODO - make timeout wait configurable
-		// set timeout of 1 sec for receiving packet from client
-		err := conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-
-		if err != nil {
-			return conn, 0, err
-		}
-
 		n, raddr, err := readWithRetry(conn, 3, buf, blk)
 
 		if err != nil {
@@ -157,6 +150,12 @@ func sendErr(conn *net.UDPConn, code cor.ErrCode, message string) error {
 
 func readWithRetry(conn *net.UDPConn, retries int, ioBuf []byte, lastSuccessfulBlock int) (numBytes int, raddr *net.UDPAddr, err error) {
 	for retryCount := 0; retryCount <= retries; retryCount++ {
+		err := conn.SetReadDeadline(time.Now().Add(timeout))
+
+		if err != nil {
+			return 0, nil, err
+		}
+
 		numBytes, raddr, err = conn.ReadFromUDP(ioBuf)
 
 		if err == nil {
@@ -180,7 +179,7 @@ func readWithRetry(conn *net.UDPConn, retries int, ioBuf []byte, lastSuccessfulB
 		}
 
 		// notify the client that we want to retry
-		err := sendAck(conn, lastSuccessfulBlock)
+		err = sendAck(conn, lastSuccessfulBlock)
 
 		if err != nil {
 			// unable to communicate with the client - bail out
