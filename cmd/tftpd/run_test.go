@@ -10,6 +10,11 @@ import (
 )
 
 func TestRun(t *testing.T) {
+
+	initialArgs := os.Args
+
+	os.Args = []string{"program-name", "--port=47381"}
+
 	sigChan := make(chan os.Signal, 1)
 	go func() {
 		time.Sleep(500 * time.Millisecond)
@@ -21,4 +26,6 @@ func TestRun(t *testing.T) {
 	if msg, ok := tcore.TErr("err := run(sigChan)", err); !ok {
 		t.Error(msg)
 	}
+
+	os.Args = initialArgs
 }
