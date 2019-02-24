@@ -4,12 +4,14 @@ package srv
 
 import (
 	"fmt"
+	"net"
+
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
 	"github.com/webern/tftp/lib/stor"
-	"net"
 )
 
+// get transfers data from the store to a UDP TFTP Client
 func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error) {
 	conn, err = net.DialUDP("udp", &hndshk.server, &hndshk.client)
 
@@ -57,9 +59,16 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 		}
 
 		n, addr, err := conn.ReadFromUDP(buf)
+
+		if err != nil {
+			return conn, 0, flog.Wrap(err)
+		}
+
 		if addr.Port != hndshk.client.Port {
 			return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
-		} else if n <= 0 {
+		}
+
+		if n <= 0 {
 			return conn, 0, flog.Raisef("bad acknowledgement packet")
 		}
 
@@ -122,4 +131,40 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	}
 
 	return conn, numBytes, nil
+}
+
+func sendEmptyEnding(block int, conn *net.UDPConn) error {
+	data := cor.PacketData{}
+	data.BlockNum = uint16(blk)
+	data.Data = make([]byte, 0)
+	_, err = conn.Write(data.Serialize())
+
+	if err != nil {
+		flog.Error(err.Error())
+	}
+
+	n, addr, err := conn.ReadFromUDP(buf)
+	if addr.Port != hndshk.client.Port {
+		return conn, 0, flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
+	} else if n <= 0 {
+		return conn, 0, flog.Raisef("bad acknowledgement packet")
+	}
+
+	packet, err := cor.ParsePacket(buf)
+
+	if err != nil {
+		return conn, 0, flog.Wrap(err)
+	} else if !packet.IsAck() {
+		return conn, 0, flog.Raise("wrong packet type")
+	}
+
+	ack, ok := packet.(*cor.PacketAck)
+
+	if !ok {
+		flog.Bug()
+	}
+
+	if ack.BlockNum != uint16(blk) {
+		return conn, 0, flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, blk)
+	}
 }

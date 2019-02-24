@@ -4,12 +4,13 @@ package srv
 
 import (
 	"fmt"
-	"github.com/webern/tftp/lib/stor"
 	"math"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/webern/tftp/lib/stor"
 
 	"github.com/webern/flog"
 	"github.com/webern/tcore"
@@ -27,32 +28,26 @@ func TestSendHandshakeAck(t *testing.T) {
 	}
 
 	buf := make([]byte, cor.MaxPacketSize)
-	readyForSend := sync.WaitGroup{}
-	readyForSend.Add(1)
 	doneReceiving := sync.WaitGroup{}
 	doneReceiving.Add(1)
 
 	go func() {
-		go func() {
-			defer doneReceiving.Done()
-			numBytes, addr, err := receiver.ReadFromUDP(buf)
+		defer doneReceiving.Done()
+		numBytes, addr, err := receiver.ReadFromUDP(buf)
 
-			if err != nil {
-				t.Error(err.Error())
-			}
+		if err != nil {
+			t.Error(err.Error())
+		}
 
-			if addr == nil {
-				t.Error("addr is nil")
-			}
+		if addr == nil {
+			t.Error("addr is nil")
+		}
 
-			if numBytes <= 0 {
-				t.Error("num bytes should be greater than zero")
-			}
-		}()
-		readyForSend.Done()
+		if numBytes <= 0 {
+			t.Error("num bytes should be greater than zero")
+		}
 	}()
 
-	readyForSend.Wait()
 	err = sendHandshakeAck(sender)
 	doneReceiving.Wait()
 	packet, err := cor.ParsePacket(buf)

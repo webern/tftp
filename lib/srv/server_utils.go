@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
+
+	"github.com/webern/tftp/lib/stor"
 
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
@@ -90,4 +93,40 @@ func memset(b []byte) {
 	for i := 0; i < len(b); i++ {
 		b[i] = 0
 	}
+}
+
+type TransferFunc = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
+
+func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f TransferFunc) {
+	conn, n, err := f(hndshk, store)
+
+	if err != nil {
+		switch e := err.(type) {
+		case *cor.Err:
+			{
+				if conn != nil {
+					_ = e.Send(conn)
+				}
+
+				l.Error = e
+			}
+		default:
+			{
+				wr := cor.NewErrWrap(e)
+				if conn != nil {
+					_ = wr.Send(conn)
+				}
+
+				l.Error = wr
+			}
+		}
+	} else {
+		l.Bytes = n
+	}
+
+	l.Duration = time.Since(l.Start)
+	l.Client = hndshk.client
+	l.File = hndshk.tftpInfo.Filename
+	l.Op = hndshk.tftpInfo.Op()
+	lch <- l
 }
