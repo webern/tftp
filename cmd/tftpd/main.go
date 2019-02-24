@@ -3,22 +3,18 @@
 package main
 
 import (
-	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/srv"
-	"github.com/webern/tftp/lib/stor"
 	"os"
+
+	"github.com/webern/flog"
 )
 
 func main() {
-	flog.SetTruncationPath("tftp/")
-	flog.SetLevel(flog.TraceLevel)
-	srvr := srv.NewServer(stor.NewMemStore(), "tftp_conn.log")
-	err := srvr.Serve(69)
+	err := run(make(chan os.Signal, 1))
 
 	if err != nil {
 		flog.Error(err.Error())
 		os.Exit(1)
 	}
 
-	os.Exit(0)
+	flog.InfoAlways("successful exit")
 }
