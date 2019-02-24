@@ -4,12 +4,13 @@ package srv
 
 import (
 	"fmt"
-	"github.com/webern/flog"
-	"github.com/webern/tftp/lib/stor"
 	"net"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/webern/flog"
+	"github.com/webern/tftp/lib/stor"
 
 	"github.com/webern/tftp/lib/cor"
 )
@@ -19,20 +20,36 @@ import (
 // TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
 const TftpMaxPacketSize = 1468
 
+const retries = 3
+const timeout = 3 * time.Second
+const logChanDepth = 3
+
+// Server listens and responds to UDP TFTP Requests
 type Server struct {
-	store  stor.Store
-	lch    chan LogEntry
-	lfile  string
-	conn   *net.UDPConn
-	stopMX sync.RWMutex // protects the stop boolean
-	stop   bool         // tells the Serve function when it should bail out
+	// these data members should be set before calling Serve
+
+	// LogFilePath tells the server where to write the connection log. If you do not want the connections
+	// logged to a file then leave it blank and connection logs will be written to stdout instead.
+	LogFilePath string
+
+	Port    int           // The listening port, defaults to 69 per TFTP standard
+	Verbose bool          // Sets the stdout logging to 'trace'. Does not affect the connection log
+	store   stor.Store    // stores and retrieves files by name
+	lch     chan LogEntry // log entries will be sent to this channel for the connection log
+	conn    *net.UDPConn  // is nil until Serve is called
+	stopMX  sync.RWMutex  // protects the stop boolean
+	stop    bool          // tells the Serve function when it should bail out
 }
 
-func NewServer(store stor.Store, logFilename string) Server {
+func NewServer(store stor.Store) Server {
 	s := Server{
-		store: store,
-		lch:   make(chan LogEntry, 3),
-		lfile: logFilename,
+		Port:    69,
+		Verbose: false,
+		store:   store,
+		lch:     make(chan LogEntry, logChanDepth),
+		conn:    nil,
+		stopMX:  sync.RWMutex{},
+		stop:    false,
 	}
 	return s
 }
@@ -45,10 +62,10 @@ func sendError(conn *net.UDPConn, theError error) error {
 	return err
 }
 
-func (s *Server) Serve(port uint16) error {
+func (s *Server) Serve() error {
 	defer flog.Trace("stopped")
 	go s.logAsync()
-	mainListener, err := makeListener(port)
+	mainListener, err := makeListener(uint16(s.Port))
 
 	if err != nil {
 		return err
@@ -137,21 +154,29 @@ func (s *Server) Stop() error {
 
 func (s *Server) logAsync() {
 	defer flog.Trace("exit")
-	lfile, err := os.Create(s.lfile)
+	var lfile *os.File
+	var err error
 
-	if err != nil {
-		flog.Errorf("could not create log file: %s", err.Error())
-		return
+	// create the file, will be appended with each log entry
+	if len(s.LogFilePath) > 0 {
+		lfile, err = os.Create(s.LogFilePath)
+
+		if err != nil {
+			flog.Errorf("could not create log file: %s", err.Error())
+			return
+		}
+
+		err = lfile.Close()
+
+		if err != nil {
+			flog.Errorf("could not close log file: %s", err.Error())
+			return
+		}
+
+		lfile = nil
 	}
 
-	err = lfile.Close()
-	lfile = nil
-
-	if err != nil {
-		flog.Errorf("could not close log file: %s", err.Error())
-		return
-	}
-
+	// receive log entries on channel, exit when channel is closed
 	for {
 		le, ok := <-s.lch
 
@@ -159,18 +184,24 @@ func (s *Server) logAsync() {
 			return
 		}
 
-		lfile, err = os.OpenFile(s.lfile, os.O_APPEND|os.O_WRONLY, 0600)
+		if len(s.LogFilePath) > 0 {
+			lfile, err = os.OpenFile(s.LogFilePath, os.O_APPEND|os.O_WRONLY, 0600)
 
-		if err != nil {
-			flog.Errorf("could not open log file: %s", err.Error())
-			return
+			if err != nil {
+				flog.Errorf("could not open log file: %s", err.Error())
+				return
+			}
+
+			_, err = lfile.WriteString(fmt.Sprintf("%s\n", le.String()))
+
+			if err != nil {
+				flog.Errorf("could not close log file: %s", err.Error())
+				return
+			}
 		}
 
-		_, err = lfile.WriteString(fmt.Sprintf("%s\n", le.String()))
-
-		if err != nil {
-			flog.Errorf("could not close log file: %s", err.Error())
-			return
+		if s.Verbose || len(s.LogFilePath) == 0 {
+			flog.Trace(le.String())
 		}
 	}
 }
