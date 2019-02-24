@@ -76,14 +76,12 @@ func (s *Server) Serve() error {
 	s.conn = mainListener
 
 	for {
-
 		s.stopMX.RLock()
 		if s.stop {
 			s.stopMX.RUnlock()
 			return nil
 		}
 		s.stopMX.RUnlock()
-
 		handshake, err := waitForHandshake(s.conn)
 
 		s.stopMX.RLock()
@@ -127,8 +125,7 @@ func (s *Server) Serve() error {
 			return err
 		}
 	}
-
-	return nil
+	// unreachable
 }
 
 func (s *Server) Stop() error {
