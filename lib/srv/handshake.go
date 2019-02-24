@@ -8,7 +8,7 @@ import (
 	"github.com/webern/tftp/lib/cor"
 )
 
-// agreement represents a handshake between the client and the server. it contains the client's port number, the
+// handshake represents a handshake between the client and the server. it contains the client's port number, the
 // server's port number, and the operation type
 type handshake struct {
 	tftpInfo cor.PacketRequest
