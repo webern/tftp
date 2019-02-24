@@ -2,6 +2,7 @@
 
 package cor
 
+// File represents a file that will be transferred by TFTP
 type File struct {
 	Name string
 	Data []byte

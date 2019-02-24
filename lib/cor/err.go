@@ -4,19 +4,23 @@ package cor
 
 import (
 	"fmt"
-	"github.com/webern/flog"
 	"net"
+
+	"github.com/webern/flog"
 )
 
+// Err represents a PacketErr while also implementing the error interface
 type Err struct {
 	packet   PacketError
 	location string
 }
 
+// Error implements the error interface
 func (e *Err) Error() string {
 	return fmt.Sprintf("%s: %s, location: %s", e.packet.Code.String(), e.packet.Msg, e.location)
 }
 
+// Send sends the Err as a PacketError to conn
 func (e *Err) Send(conn *net.UDPConn) error {
 	_, err := conn.Write(e.packet.Serialize())
 
@@ -27,10 +31,12 @@ func (e *Err) Send(conn *net.UDPConn) error {
 	return nil
 }
 
+// Code gets the error Code
 func (e *Err) Code() ErrCode {
 	return e.packet.Code
 }
 
+// NewErr creates a new Err
 func NewErr(code ErrCode, message string) *Err {
 	e := Err{}
 	e.packet.Msg = message
@@ -39,6 +45,7 @@ func NewErr(code ErrCode, message string) *Err {
 	return &e
 }
 
+// NewErrf creates a new error using fmt.Printf semantics
 func NewErrf(code ErrCode, messageFmt string, args ...interface{}) error {
 	e := Err{}
 	e.packet.Msg = fmt.Sprintf(messageFmt, args...)
@@ -47,6 +54,7 @@ func NewErrf(code ErrCode, messageFmt string, args ...interface{}) error {
 	return &e
 }
 
+// NewErrWrap takes an error and creates an Err out of it
 func NewErrWrap(err error) *Err {
 	e := Err{}
 	e.packet.Msg = err.Error()
