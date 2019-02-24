@@ -42,13 +42,6 @@ You may now send and receive files to/from the `tftpd` server.
 To stop the server, use control-c to send a sigint.
 
 
-TODO
-----
-
-Remember to commit flog, tcore, etc. to master so that go get will retreive working versions
-
-
-
 Testing
 -------
 To run all tests, from the root of the repo:
