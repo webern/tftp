@@ -9,14 +9,30 @@ This is a simple in-memory TFTP server, implemented in Go.  It is
 RFC1350-compliant, but doesn't implement the additions in later RFCs.  In
 particular, options are not recognized.
 
+It always operates in `Octet` mode, and ignores any mode string.
+
+Installation and Build
+----------------------
+
+The project is using GOPATH, not modules. For best results, get the project with:
+
+`go get github.com/webern/tftp`
+
+Then, with your GOPATH properly set:
+
+`cd $GOPATH/src/github.com/webern/tftp`
+
+Usage
+-----
+
+
+
 TODO
 ----
 
 Remember to commit flog, tcore, etc. to master so that go get will retreive working versions
 
-Usage
------
-TODO
+
 
 Testing
 -------
