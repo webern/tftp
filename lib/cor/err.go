@@ -4,8 +4,9 @@ package cor
 
 import (
 	"fmt"
-	"github.com/webern/flog"
 	"net"
+
+	"github.com/webern/flog"
 )
 
 type Err struct {
@@ -39,7 +40,7 @@ func NewErr(code ErrCode, message string) *Err {
 	return &e
 }
 
-func NewErrf(code ErrCode, messageFmt string, args ...interface{}) error {
+func NewErrf(code ErrCode, messageFmt string, args ...interface{}) *Err {
 	e := Err{}
 	e.packet.Msg = fmt.Sprintf(messageFmt, args...)
 	e.packet.Code = code
