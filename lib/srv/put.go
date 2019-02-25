@@ -20,42 +20,6 @@ var packetPool = sync.Pool{
 	},
 }
 
-type TransferFunc = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
-
-func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f TransferFunc) {
-	conn, n, err := f(hndshk, store)
-
-	if err != nil {
-		switch e := err.(type) {
-		case *cor.Err:
-			{
-				if conn != nil {
-					_ = e.Send(conn)
-				}
-
-				l.Error = e
-			}
-		default:
-			{
-				wr := cor.NewErrWrap(e)
-				if conn != nil {
-					_ = wr.Send(conn)
-				}
-
-				l.Error = wr
-			}
-		}
-	} else {
-		l.Bytes = n
-	}
-
-	l.Duration = time.Since(l.Start)
-	l.Client = hndshk.client
-	l.File = hndshk.tftpInfo.Filename
-	l.Op = hndshk.tftpInfo.Op()
-	lch <- l
-}
-
 func put(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error) {
 	conn, err = net.DialUDP("udp", &hndshk.server, &hndshk.client)
 

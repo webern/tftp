@@ -4,11 +4,14 @@ package srv
 
 import (
 	"fmt"
-	"github.com/webern/tftp/lib/cor"
 	"net"
 	"time"
+
+	"github.com/webern/tftp/lib/cor"
 )
 
+// LogEntry represents an item that will be written to the connection log.
+// Each client connection is represented by one LogEntry
 type LogEntry struct {
 	Start    time.Time
 	Duration time.Duration
@@ -19,6 +22,7 @@ type LogEntry struct {
 	Bytes    int
 }
 
+// String serializes the LogEntry to a string
 func (l *LogEntry) String() string {
 	opName := "UNK"
 

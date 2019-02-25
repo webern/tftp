@@ -1,5 +1,6 @@
 build/*
 !build/.keep
+*.out
 
 # generated...
 # Created by https://www.gitignore.io/api/go,macos,linux,windows,jetbrains

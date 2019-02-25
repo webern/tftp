@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
+
+	"github.com/webern/tftp/lib/stor"
 
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
@@ -51,26 +54,16 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 
 	if err != nil {
 		return handshake{}, flog.Wrap(err)
-	} else if ua == nil || numBytes <= 0 {
+	}
+
+	if ua == nil || numBytes <= 0 {
 		return handshake{}, flog.Raise("unable to receive the udp packet")
 	}
 
-	pkt, err := cor.ParsePacket(buf)
+	tftpInfo, err := parsePacket(buf)
 
 	if err != nil {
-		return handshake{}, flog.Wrap(err)
-	} else if pkt == nil {
-		return handshake{}, flog.Raise("nil packet received from wire.ParsePacket")
-	}
-
-	if !pkt.IsRRQ() && !pkt.IsWRQ() {
-		return handshake{}, flog.Raisef("bad op value: %d", pkt.Op())
-	}
-
-	tftpInfo, ok := pkt.(*cor.PacketRequest)
-
-	if !ok || tftpInfo == nil {
-		return handshake{}, flog.Raise("unable to downcast the packaet to the correct type")
+		return handshake{}, err
 	}
 
 	serverAddress, err := net.ResolveUDPAddr("udp", ":0")
@@ -86,8 +79,67 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 	return handshk, nil
 }
 
+func parsePacket(buf []byte) (*cor.PacketRequest, error) {
+	pkt, err := cor.ParsePacket(buf)
+	if err != nil {
+		return nil, flog.Wrap(err)
+	}
+	if pkt == nil {
+		return nil, flog.Raise("nil packet received from ParsePacket")
+	}
+	if !pkt.IsRRQ() && !pkt.IsWRQ() {
+		return nil, flog.Raisef("bad op value: %d", pkt.Op())
+	}
+	tftpInfo, ok := pkt.(*cor.PacketRequest)
+
+	if !ok || tftpInfo == nil {
+		return nil, flog.Raise("unable to downcast the packaet to the correct type")
+	}
+
+	return tftpInfo, nil
+}
+
+// memset sets all bytes to zero
 func memset(b []byte) {
 	for i := 0; i < len(b); i++ {
 		b[i] = 0
 	}
+}
+
+// transferFunction is a type alias for get and put, which both share the logic in doAsyncTransfer
+type transferFunction = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
+
+// doAsyncTransfer wraps both the get and put functions with error handling and logging stuff
+func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f transferFunction) {
+	conn, n, err := f(hndshk, store)
+
+	if err != nil {
+		switch e := err.(type) {
+		case *cor.Err:
+			{
+				if conn != nil {
+					_ = e.Send(conn)
+				}
+
+				l.Error = e
+			}
+		default:
+			{
+				wr := cor.NewErrWrap(e)
+				if conn != nil {
+					_ = wr.Send(conn)
+				}
+
+				l.Error = wr
+			}
+		}
+	} else {
+		l.Bytes = n
+	}
+
+	l.Duration = time.Since(l.Start)
+	l.Client = hndshk.client
+	l.File = hndshk.tftpInfo.Filename
+	l.Op = hndshk.tftpInfo.Op()
+	lch <- l
 }
