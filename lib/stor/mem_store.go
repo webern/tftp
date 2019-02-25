@@ -3,9 +3,10 @@
 package stor
 
 import (
+	"sync"
+
 	"github.com/webern/flog"
 	"github.com/webern/tftp/lib/cor"
-	"sync"
 )
 
 var _ Store = (*memStore)(nil)

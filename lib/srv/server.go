@@ -73,8 +73,6 @@ func (s *Server) Serve() error {
 
 	if err != nil {
 		return err
-	} else if mainListener == nil {
-		return flog.Raise("main listening connection could not be opened")
 	}
 
 	s.conn = mainListener
@@ -108,21 +106,7 @@ func (s *Server) Serve() error {
 		} else if handshake.tftpInfo.IsRRQ() {
 			go doAsyncTransfer(handshake, s.store, l, s.lch, get)
 		} else {
-			go func() {
-				conn, err := net.DialUDP("udp", &handshake.server, &handshake.client)
-				if err != nil {
-					flog.Error(err.Error())
-					return
-				}
-
-				err = sendErr(conn, cor.ErrBadOp, "")
-
-				if err != nil {
-					flog.Error(err.Error())
-					return
-				}
-
-			}()
+			go s.sendBadOp(handshake)
 		}
 
 		if err != nil {
@@ -130,6 +114,22 @@ func (s *Server) Serve() error {
 		}
 	}
 	// unreachable
+}
+
+func (s *Server) sendBadOp(h handshake) {
+	conn, err := net.DialUDP("udp", &h.server, &h.client)
+
+	if err != nil {
+		flog.Error(err.Error())
+		return
+	}
+
+	err = sendErr(conn, cor.ErrBadOp, "")
+
+	if err != nil {
+		flog.Error(err.Error())
+		return
+	}
 }
 
 // Stop will stop the server and cause server.Serve() to exit
@@ -157,26 +157,10 @@ func (s *Server) Stop() error {
 // logAsync runs on its own goroutine, receiving and writing connection logs
 func (s *Server) logAsync() {
 	defer flog.Trace("exit")
-	var lfile *os.File
-	var err error
 
 	// create the file, will be appended with each log entry
 	if len(s.LogFilePath) > 0 {
-		lfile, err = os.Create(s.LogFilePath)
-
-		if err != nil {
-			flog.Errorf("could not create log file: %s", err.Error())
-			return
-		}
-
-		err = lfile.Close()
-
-		if err != nil {
-			flog.Errorf("could not close log file: %s", err.Error())
-			return
-		}
-
-		lfile = nil
+		_ = s.createLogFile()
 	}
 
 	// receive log entries on channel, exit when channel is closed
@@ -187,24 +171,48 @@ func (s *Server) logAsync() {
 			return
 		}
 
-		if len(s.LogFilePath) > 0 {
-			lfile, err = os.OpenFile(s.LogFilePath, os.O_APPEND|os.O_WRONLY, 0600)
-
-			if err != nil {
-				flog.Errorf("could not open log file: %s", err.Error())
-				return
-			}
-
-			_, err = lfile.WriteString(fmt.Sprintf("%s\n", le.String()))
-
-			if err != nil {
-				flog.Errorf("could not close log file: %s", err.Error())
-				return
-			}
-		}
-
-		if s.Verbose || len(s.LogFilePath) == 0 {
-			flog.Trace(le.String())
-		}
+		s.writeLog(le)
 	}
+}
+
+func (s *Server) writeLog(le LogEntry) {
+	if s.Verbose || len(s.LogFilePath) == 0 {
+		flog.Trace(le.String())
+	}
+
+	if len(s.LogFilePath) == 0 {
+		return
+	}
+
+	lfile, err := os.OpenFile(s.LogFilePath, os.O_APPEND|os.O_WRONLY, 0600)
+
+	if err != nil {
+		flog.Errorf("could not open log file: %s", err.Error())
+		return
+	}
+
+	_, err = lfile.WriteString(fmt.Sprintf("%s\n", le.String()))
+
+	if err != nil {
+		flog.Errorf("could not close log file: %s", err.Error())
+		return
+	}
+}
+
+func (s *Server) createLogFile() error {
+	lfile, err := os.Create(s.LogFilePath)
+
+	if err != nil {
+		flog.Errorf("could not create log file: %s", err.Error())
+		return nil
+	}
+
+	err = lfile.Close()
+
+	if err != nil {
+		flog.Errorf("could not close log file: %s", err.Error())
+		return err
+	}
+
+	return nil
 }

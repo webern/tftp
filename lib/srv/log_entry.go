@@ -22,6 +22,7 @@ type LogEntry struct {
 	Bytes    int
 }
 
+// String serializes the LogEntry to a string
 func (l *LogEntry) String() string {
 	opName := "UNK"
 
