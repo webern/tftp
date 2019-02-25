@@ -4,6 +4,7 @@ package stor
 
 import "github.com/webern/tftp/lib/cor"
 
+// Store represents a mechanism for storing and retrieving files by name
 type Store interface {
 	// Put stores a file in the Store (overwriting if a file by the same name exists). Set is safe for concurrent
 	// goroutine access. The file is deep copied before storing.

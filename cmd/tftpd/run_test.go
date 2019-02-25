@@ -13,7 +13,7 @@ func TestRun(t *testing.T) {
 
 	initialArgs := os.Args
 
-	os.Args = []string{"program-name", "--port=47381"}
+	os.Args = []string{"program-name", "--port=47381", "--quiet"}
 
 	sigChan := make(chan os.Signal, 1)
 	go func() {

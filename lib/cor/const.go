@@ -5,9 +5,11 @@ package cor
 // https://tools.ietf.org/html/rfc1350
 
 const (
+	// BlockSize is the standard chunk size for TFTP transfers
 	BlockSize = 512
 )
 
+// ErrCode represents the error codes given by RFC 1350
 type ErrCode uint16
 
 const (
