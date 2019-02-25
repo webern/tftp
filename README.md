@@ -54,6 +54,31 @@ To run all tests and get a code coverage report, from the root of the repo:
 
 Additionally, tests are running on CircleCI, [here](https://circleci.com/gh/webern/tftp).
 
+Directories
+-----------
+
+  * `build` is a gitignored directory where we can output our built binaries.
+  * `cmd/tftpd` contains a command-line `main` package for running a tftp daemon.
+  * `lib` contains three packages that make up the `tftp` library.
+
+Packages
+-----------
+  
+  * `cmd/tftpd` main: the tftp daemon program.
+  * `lib/cor` core tftp concepts such as packet serialization and deserialization.
+  * `lib/srv` the tftp server, UDP.
+  * `lib/stor` an interface and implementation for storing and retrieving files.
+
+Approach
+--------
+
+  * The mechanism for storing and retrieving files is injected when we create the server, e.g. `srv.NewServer(cor.NewMemStore())`. This makes it simple to inject filesystem, S3, or other storage systems.
+  * The server listens for connections on a single goroutine, but as soon as a connection is read, the listening goroutine starts a new goroutine and hands off the connection.
+  * The MemStore uses a mutex to protect its map of file data, then the server shares the MemStore between goroutines safely. I tried using channels for this but found it overly complex.
+  * A channel is used to send connection logs to a file.
+
+Overall the system seems to work correctly.
+
 Inspiration / Research
 ----------------------
 
