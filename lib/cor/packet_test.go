@@ -3,9 +3,10 @@
 package cor
 
 import (
-	"github.com/webern/tcore"
 	"reflect"
 	"testing"
+
+	"github.com/webern/tcore"
 )
 
 func TestSerializationDeserialization(t *testing.T) {

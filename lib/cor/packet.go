@@ -5,16 +5,17 @@ package cor
 import (
 	"bytes"
 	"encoding/binary"
+
 	"github.com/webern/flog"
 )
 
-// larger than a typical mtu (1500), and largest DATA packet (516).
-// may limit the length of filenames in RRQ/WRQs -- RFC1350 doesn't offer a bound for these.
+// MaxPacketSize represents the maximum expected UDP packet size. Larger than a typical mtu (1500), and largest DATA
+// packet (516). may limit the length of filenames in RRQ/WRQs -- RFC1350 doesn't offer a bound for these.
 const MaxPacketSize = 2048
 
 // Packet is the interface met by all packet structs
 type Packet interface {
-	// OpType returns the OpType code for this packet
+	// Op returns the OpType code for this packet
 	Op() OpType
 
 	// Parse parses a packet from its wire representation
@@ -46,25 +47,35 @@ type PacketRequest struct {
 	Mode     string
 }
 
+// Op returns the OpType code for this packet
 func (p *PacketRequest) Op() OpType {
 	return p.OpCode
 }
 
+// Parse parses a packet
 func (p *PacketRequest) Parse(buf []byte) (err error) {
 	var opUntyped uint16
-	if opUntyped, buf, err = parseUint16(buf); err != nil {
+	var buf2 []byte
+	var buf3 []byte
+
+	if opUntyped, buf2, err = parseUint16(buf); err != nil {
 		return err
 	}
+
 	p.OpCode = OpType(opUntyped)
-	if p.Filename, buf, err = parseString(buf); err != nil {
+
+	if p.Filename, buf3, err = parseString(buf2); err != nil {
 		return err
 	}
-	if p.Mode, buf, err = parseString(buf); err != nil {
+
+	if p.Mode, _, err = parseString(buf3); err != nil {
 		return err
 	}
+
 	return nil
 }
 
+// Serialize serializes a packet to its wire representation
 func (p *PacketRequest) Serialize() []byte {
 	buf := make([]byte, 2+len(p.Filename)+1+len(p.Mode)+1)
 	binary.BigEndian.PutUint16(buf, uint16(p.OpCode))
@@ -73,22 +84,27 @@ func (p *PacketRequest) Serialize() []byte {
 	return buf
 }
 
+// IsRRQ is for convenience, returns true if the packet is a read request packet
 func (p *PacketRequest) IsRRQ() bool {
 	return p.OpCode == OpRRQ
 }
 
+// IsWRQ is for convenience, returns true if the packet is a write request packet
 func (p *PacketRequest) IsWRQ() bool {
 	return p.OpCode == OpWRQ
 }
 
+// IsData is for convenience, returns true if the packet is a data packet
 func (p *PacketRequest) IsData() bool {
 	return false
 }
 
+// IsAck is for convenience, returns true if the packet is a ack packet
 func (p *PacketRequest) IsAck() bool {
 	return false
 }
 
+// IsError is for convenience, returns true if the packet is an error packet
 func (p *PacketRequest) IsError() bool {
 	return false
 }
@@ -99,10 +115,12 @@ type PacketData struct {
 	Data     []byte
 }
 
+// Op returns the OpType code for this packet
 func (p *PacketData) Op() OpType {
 	return OpData
 }
 
+// Parse parses a packet
 func (p *PacketData) Parse(buf []byte) (err error) {
 	buf = buf[2:] // skip over op
 	if p.BlockNum, buf, err = parseUint16(buf); err != nil {
@@ -112,6 +130,7 @@ func (p *PacketData) Parse(buf []byte) (err error) {
 	return nil
 }
 
+// Serialize serializes a packet to its wire representation
 func (p *PacketData) Serialize() []byte {
 	buf := make([]byte, 4+len(p.Data))
 	binary.BigEndian.PutUint16(buf, OpData)
@@ -120,22 +139,27 @@ func (p *PacketData) Serialize() []byte {
 	return buf
 }
 
+// IsRRQ is for convenience, returns true if the packet is a read request packet
 func (p *PacketData) IsRRQ() bool {
 	return false
 }
 
+// IsWRQ is for convenience, returns true if the packet is a write request packet
 func (p *PacketData) IsWRQ() bool {
 	return false
 }
 
+// IsData is for convenience, returns true if the packet is a data packet
 func (p *PacketData) IsData() bool {
 	return true
 }
 
+// IsAck is for convenience, returns true if the packet is a ack packet
 func (p *PacketData) IsAck() bool {
 	return false
 }
 
+// IsError is for convenience, returns true if the packet is an error packet
 func (p *PacketData) IsError() bool {
 	return false
 }
@@ -145,10 +169,12 @@ type PacketAck struct {
 	BlockNum uint16
 }
 
+// Op returns the OpType code for this packet
 func (p *PacketAck) Op() OpType {
 	return OpAck
 }
 
+// Parse parses a packet
 func (p *PacketAck) Parse(buf []byte) (err error) {
 	buf = buf[2:] // skip over op
 	if p.BlockNum, buf, err = parseUint16(buf); err != nil {
@@ -157,6 +183,7 @@ func (p *PacketAck) Parse(buf []byte) (err error) {
 	return nil
 }
 
+// Serialize serializes a packet to its wire representation
 func (p *PacketAck) Serialize() []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint16(buf, OpAck)
@@ -164,22 +191,27 @@ func (p *PacketAck) Serialize() []byte {
 	return buf
 }
 
+// IsRRQ is for convenience, returns true if the packet is a read request packet
 func (p *PacketAck) IsRRQ() bool {
 	return false
 }
 
+// IsWRQ is for convenience, returns true if the packet is a write request packet
 func (p *PacketAck) IsWRQ() bool {
 	return false
 }
 
+// IsData is for convenience, returns true if the packet is a data packet
 func (p *PacketAck) IsData() bool {
 	return false
 }
 
+// IsAck is for convenience, returns true if the packet is a ack packet
 func (p *PacketAck) IsAck() bool {
 	return true
 }
 
+// IsError is for convenience, returns true if the packet is an error packet
 func (p *PacketAck) IsError() bool {
 	return false
 }
@@ -190,10 +222,12 @@ type PacketError struct {
 	Msg  string
 }
 
+// Op returns the OpType code for this packet
 func (p *PacketError) Op() OpType {
 	return OpError
 }
 
+// Parse parses a packet
 func (p *PacketError) Parse(buf []byte) (err error) {
 	buf = buf[2:] // skip over op
 	code := uint16(0)
@@ -207,6 +241,7 @@ func (p *PacketError) Parse(buf []byte) (err error) {
 	return nil
 }
 
+// Serialize serializes a packet to its wire representation
 func (p *PacketError) Serialize() []byte {
 	buf := make([]byte, 4+len(p.Msg)+1)
 	binary.BigEndian.PutUint16(buf, OpError)
@@ -215,22 +250,27 @@ func (p *PacketError) Serialize() []byte {
 	return buf
 }
 
+// IsRRQ is for convenience, returns true if the packet is a read request packet
 func (p *PacketError) IsRRQ() bool {
 	return false
 }
 
+// IsWRQ is for convenience, returns true if the packet is a write request packet
 func (p *PacketError) IsWRQ() bool {
 	return false
 }
 
+// IsData is for convenience, returns true if the packet is a data packet
 func (p *PacketError) IsData() bool {
 	return false
 }
 
+// IsAck is for convenience, returns true if the packet is a ack packet
 func (p *PacketError) IsAck() bool {
 	return false
 }
 
+// IsError is for convenience, returns true if the packet is an error packet
 func (p *PacketError) IsError() bool {
 	return true
 }
