@@ -18,13 +18,11 @@ import (
 )
 
 func TestSendHandshakeAck(t *testing.T) {
-	var client, _ = net.ResolveUDPAddr("udp", ":54236")
-	var server, _ = net.ResolveUDPAddr("udp", ":32451")
-	receiver, err := net.DialUDP("udp", client, server)
-	sender, err := net.DialUDP("udp", server, client)
+	receiver, sender, err := setupConn()
 
-	if err != nil {
-		t.Error(err.Error())
+	if msg, ok := tcore.TErr("receiver, sender, err := setupConn()", err); !ok {
+		t.Error(msg)
+		return
 	}
 
 	buf := make([]byte, cor.MaxPacketSize)
@@ -49,7 +47,16 @@ func TestSendHandshakeAck(t *testing.T) {
 	}()
 
 	err = sendHandshakeAck(sender)
+
+	if msg, ok := tcore.TErr("err = sendHandshakeAck(sender)", err); !ok {
+		t.Error(msg)
+	}
+
 	doneReceiving.Wait()
+	checkAckPacket(t, buf)
+}
+
+func checkAckPacket(t *testing.T, buf []byte) {
 	packet, err := cor.ParsePacket(buf)
 
 	if err != nil {
@@ -69,7 +76,6 @@ func TestSendHandshakeAck(t *testing.T) {
 
 	if !ok || ack == nil {
 		t.Error("the ack packet could not be downcast to the correct type")
-		return
 	}
 
 	if ack.BlockNum != 0 {
@@ -83,6 +89,38 @@ func makeTestData(size int) []byte {
 		b[i] = uint8(i % math.MaxUint8)
 	}
 	return b
+}
+
+//func setupAddr( ) {
+//
+//}
+
+func setupConn() (receiver, sender *net.UDPConn, err error) {
+	client, err := net.ResolveUDPAddr("udp", ":54236")
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	server, err := net.ResolveUDPAddr("udp", ":32451")
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	receiver, err = net.DialUDP("udp", client, server)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sender, err = net.DialUDP("udp", server, client)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return receiver, sender, nil
 }
 
 func TestPut(t *testing.T) {

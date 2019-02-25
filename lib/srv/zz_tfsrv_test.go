@@ -13,7 +13,7 @@ import (
 // This is here to set the logger.
 func TestMain(m *testing.M) {
 	flog.SetTruncationPath("/tftp")
-	flog.SetLevel(flog.TraceLevel)
+	flog.SetLevel(flog.ErrorLevel)
 	code := m.Run()
 	os.Exit(code)
 }

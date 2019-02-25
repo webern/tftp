@@ -23,7 +23,9 @@ func run(sigChan chan os.Signal) error {
 	server.Port = programArgs.Port
 	server.Verbose = programArgs.Verbose
 
-	if server.Verbose {
+	if programArgs.Quiet {
+		flog.SetLevel(flog.ErrorLevel)
+	} else if server.Verbose {
 		flog.SetLevel(flog.TraceLevel)
 	} else {
 		flog.SetLevel(flog.InfoLevel)
@@ -36,7 +38,7 @@ func run(sigChan chan os.Signal) error {
 	// Serve blocks until Stop is called, so we run it on its own goroutine
 	// This function will exit once server.Stop is called
 	go func() {
-		flog.InfofAlways("tftp server is starting on port %d", server.Port)
+		flog.Infof("tftp server is starting on port %d", server.Port)
 		srvErr = server.Serve()
 		srvWait.Done()
 	}()
@@ -46,7 +48,7 @@ func run(sigChan chan os.Signal) error {
 	sig := <-sigChan
 	if sig == syscall.SIGINT {
 		fmt.Print("\n")
-		flog.InfoAlways("SIGINT received - stopping tftp server")
+		flog.Info("SIGINT received - stopping tftp server")
 		err := server.Stop()
 		if err != nil {
 			// TODO - we lose the Serve function's error, if any, in this case

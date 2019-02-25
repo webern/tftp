@@ -80,6 +80,10 @@ func sendEmptyEnding(hndshk handshake, block int, conn *net.UDPConn, buf []byte)
 
 	n, addr, err := conn.ReadFromUDP(buf)
 
+	if err != nil {
+		return err
+	}
+
 	if addr.Port != hndshk.client.Port {
 		return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 	}

@@ -60,24 +60,10 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 		return handshake{}, flog.Raise("unable to receive the udp packet")
 	}
 
-	pkt, err := cor.ParsePacket(buf)
+	tftpInfo, err := parsePacket(buf)
 
 	if err != nil {
-		return handshake{}, flog.Wrap(err)
-	}
-
-	if pkt == nil {
-		return handshake{}, flog.Raise("nil packet received from wire.ParsePacket")
-	}
-
-	if !pkt.IsRRQ() && !pkt.IsWRQ() {
-		return handshake{}, flog.Raisef("bad op value: %d", pkt.Op())
-	}
-
-	tftpInfo, ok := pkt.(*cor.PacketRequest)
-
-	if !ok || tftpInfo == nil {
-		return handshake{}, flog.Raise("unable to downcast the packaet to the correct type")
+		return handshake{}, err
 	}
 
 	serverAddress, err := net.ResolveUDPAddr("udp", ":0")
@@ -91,6 +77,26 @@ func waitForHandshake(conn *net.UDPConn) (handshake, error) {
 	handshk.client = *ua
 	handshk.server = *serverAddress
 	return handshk, nil
+}
+
+func parsePacket(buf []byte) (*cor.PacketRequest, error) {
+	pkt, err := cor.ParsePacket(buf)
+	if err != nil {
+		return nil, flog.Wrap(err)
+	}
+	if pkt == nil {
+		return nil, flog.Raise("nil packet received from ParsePacket")
+	}
+	if !pkt.IsRRQ() && !pkt.IsWRQ() {
+		return nil, flog.Raisef("bad op value: %d", pkt.Op())
+	}
+	tftpInfo, ok := pkt.(*cor.PacketRequest)
+
+	if !ok || tftpInfo == nil {
+		return nil, flog.Raise("unable to downcast the packaet to the correct type")
+	}
+
+	return tftpInfo, nil
 }
 
 // memset sets all bytes to zero
