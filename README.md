@@ -24,7 +24,7 @@ Then, with your GOPATH properly set, cd into the `tftp` repo:
 
 Then, from the root of the `tftp` repo, get dependencies:
 
-`go get ./...`
+`go get -t ./...`
 
 Then, to build the `tftpd` program from the root of the `tftp` repo:
 
