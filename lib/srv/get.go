@@ -16,10 +16,17 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	conn, err = net.DialUDP("udp", &hndshk.server, &hndshk.client)
 
 	if err != nil {
-		_ = sendErr(conn, cor.ErrNotFound, err.Error())
+		// attempt to send an error back to the client if the conn is not nil
+		if conn != nil {
+			// if this send fails we can drop the error because there's nothing more we can do with it
+			_ = sendErr(conn, cor.ErrNotFound, err.Error())
+		}
+
+		// exit because we could not establish the connection
 		return nil, 0, flog.Wrap(err)
 	}
 
+	// obtain the desired file from the store
 	theFile := cor.File{}
 	theFile.Name = hndshk.tftpInfo.Filename
 	theFile, err = store.Get(theFile.Name)
@@ -32,14 +39,15 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 		return conn, 0, cor.NewErrf(cor.ErrUnknown, "acknowledgement packet could not be sent")
 	}
 
+	// set up for the sending loop
 	numBytes = len(theFile.Data)
 	blk := 1
-
 	buf := packetPool.Get().([]byte)
 	memset(buf)
 	defer packetPool.Put(buf)
 	sendEmptyAtEnd := len(theFile.Data)%cor.BlockSize == 0
 
+	// loop through the file data with a stride length of BlockSize, send the data to the client
 	for pos := 0; pos < len(theFile.Data); {
 		end := pos + cor.BlockSize
 
@@ -57,6 +65,7 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 		pos = end
 	}
 
+	// if the last chunk we sent above was of size BlockSize then the client needs an empty block to know we are done
 	if sendEmptyAtEnd {
 		err := sendEmptyEnding(hndshk, blk, conn, buf)
 
@@ -68,6 +77,8 @@ func get(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, e
 	return conn, numBytes, nil
 }
 
+// sendEmptyEnding sends an empty block (to be used after the last chunk in the event that the last chunk aligned
+// exactly with tftp's 512 byte chunk size).
 func sendEmptyEnding(hndshk handshake, block int, conn *net.UDPConn, buf []byte) error {
 	data := cor.PacketData{}
 	data.BlockNum = uint16(block)
@@ -78,12 +89,14 @@ func sendEmptyEnding(hndshk handshake, block int, conn *net.UDPConn, buf []byte)
 		return err
 	}
 
+	// receive confirmation from client
 	n, addr, err := conn.ReadFromUDP(buf)
 
 	if err != nil {
 		return err
 	}
 
+	// check that the client port matches our expected port
 	if addr.Port != hndshk.client.Port {
 		return flog.Raisef("wrong client port, got %d, want %d", addr.Port, hndshk.client.Port)
 	}
@@ -104,10 +117,12 @@ func sendEmptyEnding(hndshk handshake, block int, conn *net.UDPConn, buf []byte)
 
 	ack, ok := packet.(*cor.PacketAck)
 
+	// if we were unable to downcast the packet then this is a fatal bug in the program
 	if !ok {
 		flog.Bug()
 	}
 
+	// check for the correct block number in the acknowledgement
 	if ack.BlockNum != uint16(block) {
 		return flog.Raisef("wrong block ack, got %d, want %d", ack.BlockNum, block)
 	}
