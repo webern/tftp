@@ -32,13 +32,14 @@ type Server struct {
 	// logged to a file then leave it blank and connection logs will be written to stdout instead.
 	LogFilePath string
 
-	Port    int           // The listening port, defaults to 69 per TFTP standard
-	Verbose bool          // Sets the stdout logging to 'trace'. Does not affect the connection log
-	store   stor.Store    // stores and retrieves files by name
-	lch     chan LogEntry // log entries will be sent to this channel for the connection log
-	conn    *net.UDPConn  // is nil until Serve is called
-	stopMX  *sync.RWMutex // protects the stop boolean
-	stop    bool          // tells the Serve function when it should bail out
+	Port    int            // The listening port, defaults to 69 per TFTP standard
+	Verbose bool           // Sets the stdout logging to 'trace'. Does not affect the connection log
+	store   stor.Store     // stores and retrieves files by name
+	lch     chan LogEntry  // log entries will be sent to this channel for the connection log
+	conn    *net.UDPConn   // is nil until Serve is called
+	stopMX  *sync.RWMutex  // protects the stop boolean
+	stop    bool           // tells the Serve function when it should bail out
+	wg      sync.WaitGroup // tells us if we have running transfers
 }
 
 // NewServer creates a new TFTP server. The Store is injected.
@@ -89,6 +90,15 @@ func (s *Server) Serve() error {
 		s.stopMX.RLock()
 		if s.stop {
 			s.stopMX.RUnlock()
+
+			if s.conn != nil {
+				e := cor.NewErr(cor.ErrNotFound, "nope")
+				err = e.Send(s.conn)
+				if err != nil {
+					flog.Error(err)
+				}
+			}
+
 			return nil
 		}
 		s.stopMX.RUnlock()
@@ -102,11 +112,23 @@ func (s *Server) Serve() error {
 		}
 
 		if handshake.tftpInfo.IsWRQ() {
-			go doAsyncTransfer(handshake, s.store, l, s.lch, put)
+			// increment the number of active connections
+			flog.Info("wg add")
+			flog.Info(&s.wg)
+			s.wg.Add(1)
+			go doAsyncTransfer(handshake, s.store, l, s.lch, put, s.wg)
 		} else if handshake.tftpInfo.IsRRQ() {
-			go doAsyncTransfer(handshake, s.store, l, s.lch, get)
+			// increment the number of active connections
+			flog.Info("wg add")
+			flog.Info(&s.wg)
+			s.wg.Add(1)
+			go doAsyncTransfer(handshake, s.store, l, s.lch, get, s.wg)
 		} else {
-			go s.sendBadOp(handshake)
+			// increment the number of active connections
+			flog.Info("wg add")
+			flog.Info(&s.wg)
+			s.wg.Add(1)
+			go s.sendBadOp(handshake, s.wg)
 		}
 
 		if err != nil {
@@ -116,7 +138,11 @@ func (s *Server) Serve() error {
 	// unreachable
 }
 
-func (s *Server) sendBadOp(h handshake) {
+func (s *Server) sendBadOp(h handshake, wg sync.WaitGroup) {
+	defer func() {
+		flog.Info("wg.done")
+		wg.Done()
+	}()
 	conn, err := net.DialUDP("udp", &h.server, &h.client)
 
 	if err != nil {
@@ -139,6 +165,7 @@ func (s *Server) Stop() error {
 	s.stopMX.Lock()
 	defer s.stopMX.Unlock()
 	s.stop = true
+	s.wg.Wait()
 
 	if s.conn != nil {
 		err = s.conn.Close()

@@ -46,7 +46,7 @@ func run(sigChan chan os.Signal) error {
 	// listen for sigint (i.e. control-c) to stop the server
 	signal.Notify(sigChan, os.Interrupt)
 	sig := <-sigChan
-	if sig == syscall.SIGINT {
+	if sig == syscall.SIGINT || true {
 		fmt.Print("\n")
 		flog.Info("SIGINT received - stopping tftp server")
 		err := server.Stop()

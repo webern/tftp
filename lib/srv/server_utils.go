@@ -110,8 +110,14 @@ func memset(b []byte) {
 type transferFunction = func(hndshk handshake, store stor.Store) (conn *net.UDPConn, numBytes int, err error)
 
 // doAsyncTransfer wraps both the get and put functions with error handling and logging stuff
-func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f transferFunction) {
+func doAsyncTransfer(hndshk handshake, store stor.Store, l LogEntry, lch chan<- LogEntry, f transferFunction, wg sync.WaitGroup) {
 	conn, n, err := f(hndshk, store)
+
+	defer func() {
+		flog.Info("wg.done")
+		flog.Info(&wg)
+		wg.Done()
+	}()
 
 	if err != nil {
 		switch e := err.(type) {
